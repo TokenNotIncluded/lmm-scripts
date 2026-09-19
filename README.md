@@ -1,3 +1,25 @@
+# LMM 工具菜单
+
+普通用户只需执行对应系统的一条命令，按数字选择 Pi、DSH 或 LMM CLI，再选择安装、更新、检查、启动和使用说明。
+
+**Linux / macOS**
+```sh
+curl -fsSL https://api.lmm.best/scripts/menu.sh | bash
+```
+
+**Windows PowerShell**
+```powershell
+irm https://api.lmm.best/scripts/menu.ps1 | iex
+```
+
+菜单需要交互终端，默认不改 PATH、不自动登录。网络选项包括自动、官方源、国内镜像；实际安装继续使用带缓存、重试和校验的安装器。菜单先完整下载并校验固定版本的底层脚本，校验不符会使用固定 Git 提交的备用地址，绝不执行校验失败的内容。临时菜单文件退出时清理，安装器缓存保留。
+
+维护者通过 `templates/menu.*.in` 和 `tools/generate_menus.py` 生成菜单；升级底层脚本时须更新生成器中的固定提交并重新生成，避免菜单与安装器版本意外混用。PowerShell 菜单带 UTF-8 BOM，兼容 Windows PowerShell 5.1 中文。
+
+底层脚本供菜单调用和自动化使用，公共页面只展示以上两个菜单入口。
+
+---
+
 # LMM 安装与使用脚本
 
 公开入口：[api.lmm.best/scripts](https://api.lmm.best/scripts)。所有根目录脚本都可以单独下载运行，不依赖远程 `source`、API Key 或管理员权限。

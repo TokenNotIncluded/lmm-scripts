@@ -21,6 +21,13 @@ jobs:
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:
           python-version: '3.x'
+      - name: Menu syntax and entry checks
+        shell: pwsh
+        run: |
+          $errors=$null; $tokens=$null
+          [void][System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PWD "menu.ps1"),[ref]$tokens,[ref]$errors)
+          if ($errors.Count) { throw ($errors | Out-String) }
+          ./menu.ps1 -Help
       - run: python tools/generate.py --check
       - name: Shell fault-injection tests
         if: runner.os != 'Windows'
