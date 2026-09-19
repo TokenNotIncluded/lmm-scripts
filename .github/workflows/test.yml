@@ -48,12 +48,15 @@ jobs:
         shell: powershell
         run: |
           .\lmm.ps1 -Root "$env:RUNNER_TEMP\lmm 测试 tools" -NoPath -Network official
+          if ($LASTEXITCODE -ne 0) { throw 'Installer or executable check failed' }
           & "$env:RUNNER_TEMP\lmm 测试 tools\bin\lmm.cmd" --version
           if ($LASTEXITCODE -ne 0) { throw 'CLI version failed' }
           & "$env:RUNNER_TEMP\lmm 测试 tools\bin\lmm.cmd" catalog pi --json
           if ($LASTEXITCODE -ne 0) { throw 'CLI catalog failed' }
           .\lmm.ps1 -Root "$env:RUNNER_TEMP\lmm 测试 tools" -NoPath -Network official
+          if ($LASTEXITCODE -ne 0) { throw 'Installer or executable check failed' }
           .\lmm.ps1 -Root "$env:RUNNER_TEMP\lmm 测试 tools" -Check
+          if ($LASTEXITCODE -ne 0) { throw 'Installer or executable check failed' }
       - name: Install real Pi and DSH on Windows
         if: runner.os == 'Windows'
         shell: powershell
@@ -63,7 +66,11 @@ jobs:
           $beforePath=$env:PATH
           $beforeRegistry=$env:npm_config_registry
           .\pi.ps1 -Root "$env:RUNNER_TEMP\lmm clients" -NoPath -Network official -InstallOnly
+          if ($LASTEXITCODE -ne 0) { throw 'Installer or executable check failed' }
           .\dsh.ps1 -Root "$env:RUNNER_TEMP\lmm clients" -NoPath -Network official -InstallOnly
+          if ($LASTEXITCODE -ne 0) { throw 'Installer or executable check failed' }
           .\pi.ps1 -Root "$env:RUNNER_TEMP\lmm clients" -Check
+          if ($LASTEXITCODE -ne 0) { throw 'Installer or executable check failed' }
           .\dsh.ps1 -Root "$env:RUNNER_TEMP\lmm clients" -Check
+          if ($LASTEXITCODE -ne 0) { throw 'Installer or executable check failed' }
           if ($env:PATH -ne $beforePath -or $env:npm_config_registry -ne $beforeRegistry) { throw 'Installer leaked process environment changes' }

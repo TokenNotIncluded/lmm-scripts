@@ -93,6 +93,7 @@ function Invoke-Bounded([string]$Executable,[string[]]$Arguments) {
         }
         if($watch.Elapsed.TotalSeconds-$last -ge 15){Write-Log ('Still working: {0:N0}s elapsed.' -f $watch.Elapsed.TotalSeconds);$last=$watch.Elapsed.TotalSeconds}
       }
+      $global:LASTEXITCODE=$process.ExitCode
       if($process.ExitCode -ne 0){throw "Installation command failed with exit code $($process.ExitCode)."}
     } finally {
       if($started -and -not $process.HasExited){Stop-InstallChild $process}
@@ -473,7 +474,7 @@ function Invoke-LmmSetup {
 }
 $savedEnvironment=@{}
 foreach($name in @('PATH','npm_config_cache','npm_config_fetch_retries','npm_config_fetch_timeout','npm_config_prefer_offline','npm_config_fetch_retry_mintimeout','npm_config_fetch_retry_maxtimeout','npm_config_strict_ssl','npm_config_registry','npm_config_store_dir')) { $savedEnvironment[$name]=[Environment]::GetEnvironmentVariable($name,'Process') }
-try { Invoke-LmmSetup }
+try { Invoke-LmmSetup; exit 0 }
 catch { Write-Error "Stopped during $script:Phase. $($_.Exception.Message)" -ErrorAction Continue; exit 1 }
 finally {
   foreach($name in $savedEnvironment.Keys) { [Environment]::SetEnvironmentVariable($name,$savedEnvironment[$name],'Process') }
