@@ -12,6 +12,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 @@CONSTANTS@@
+$script:InstalledSuccess=$false
 $script:Stage = $null; $script:LockHandle = $null; $script:Phase = 'arguments'
 $Retries=3; $ConnectTimeout=10; $StallTimeout=20; $DownloadTimeout=600; $CommandTimeout=1800; $MinSpeed=16384
 $script:Cache=$null
@@ -404,7 +405,7 @@ function Invoke-LmmSetup {
         Invoke-WithRegistryRetry $script:Client @('plugin','--profile',$Profile,'add',$archive,'--ignore-scripts','--store-dir',(Join-Path $script:Cache 'pnpm'))
       }
     }
-    $script:Phase='launcher and PATH'; Write-Launcher
+    $script:Phase='launcher and PATH'; Write-Launcher; $script:InstalledSuccess=$true
     Write-Log "Ready: $(Join-Path $Root "bin\$Target.cmd")"
     Write-Log 'Use the full path above. With -AddPath, new terminals can use the short command.'
     switch($Target) {
@@ -423,4 +424,11 @@ function Invoke-LmmSetup {
     if ($script:LockHandle) { $script:LockHandle.Dispose() }
   }
 }
-try { Invoke-LmmSetup } catch { Write-Error "Stopped during $script:Phase. $($_.Exception.Message)" -ErrorAction Continue; exit 1 }
+$savedEnvironment=@{}
+foreach($name in @('PATH','npm_config_cache','npm_config_fetch_retries','npm_config_fetch_timeout','npm_config_prefer_offline','npm_config_fetch_retry_mintimeout','npm_config_fetch_retry_maxtimeout','npm_config_strict_ssl','npm_config_registry')) { $savedEnvironment[$name]=[Environment]::GetEnvironmentVariable($name,'Process') }
+try { Invoke-LmmSetup }
+catch { Write-Error "Stopped during $script:Phase. $($_.Exception.Message)" -ErrorAction Continue; exit 1 }
+finally {
+  foreach($name in $savedEnvironment.Keys) { [Environment]::SetEnvironmentVariable($name,$savedEnvironment[$name],'Process') }
+  if ($script:InstalledSuccess -and $AddPath -and -not $NoPath) { $env:PATH=(Join-Path $Root 'bin')+';'+$env:PATH }
+}

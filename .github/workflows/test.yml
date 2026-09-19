@@ -60,7 +60,10 @@ jobs:
         run: |
           $env:PI_CODING_AGENT_DIR="$env:RUNNER_TEMP\pi-profile"
           $env:DSH_HOME="$env:RUNNER_TEMP\dsh-profile"
+          $beforePath=$env:PATH
+          $beforeRegistry=$env:npm_config_registry
           .\pi.ps1 -Root "$env:RUNNER_TEMP\lmm clients" -NoPath -Network official -InstallOnly
           .\dsh.ps1 -Root "$env:RUNNER_TEMP\lmm clients" -NoPath -Network official -InstallOnly
           .\pi.ps1 -Root "$env:RUNNER_TEMP\lmm clients" -Check
           .\dsh.ps1 -Root "$env:RUNNER_TEMP\lmm clients" -Check
+          if ($env:PATH -ne $beforePath -or $env:npm_config_registry -ne $beforeRegistry) { throw 'Installer leaked process environment changes' }

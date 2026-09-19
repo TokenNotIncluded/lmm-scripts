@@ -98,6 +98,12 @@ class InstallerTests(unittest.TestCase):
   self.assertEqual(r.returncode,0,r.stderr);self.assertTrue(list(cache.glob('*.tar.gz')))
   r=self.run_script('pi',env={'LMM_NODE_BASE_URL':'http://bad.invalid'});self.assertNotEqual(r.returncode,0)
   r=self.run_script('pi',env={'LMM_NPM_REGISTRY':'https://user:secret@bad.invalid'});self.assertNotEqual(r.returncode,0)
+ def test_launch_releases_lock_and_preserves_arguments(self):
+  version=json.loads((P/'versions.json').read_text());directory=self.root/'apps/dsh'/version['dsh_version'];(directory/'bin').mkdir(parents=True)
+  (directory/'.lmm-managed').write_text(version['dsh_version']+'|'+version['script_version']+'\n')
+  client=directory/'bin/dsh';client.write_text('#!/usr/bin/env bash\nif [ "${1:-}" = --profile ]; then test ! -e "$LMM_TEST_ROOT/.setup-lock" || exit 88; printf "%s\\n" "$@" > "$LMM_TEST_ARGS"; fi\n');client.chmod(0o755)
+  out=self.base/'arguments';r=self.run_script('dsh','--launch','--','--no-open','two words',fixture=True,env={'LMM_TEST_ROOT':str(self.root),'LMM_TEST_ARGS':str(out)})
+  self.assertEqual(r.returncode,0,r.stderr);self.assertEqual(out.read_text().splitlines(),['--profile','web','--no-open','two words']);self.assertFalse((self.root/'.setup-lock').exists())
  def test_generated_files_match_templates(self):
   subprocess.run(['python3',str(P/'tools/generate.py'),'--check'],check=True)
  def test_usage_preserves_preview_exit_code(self):
