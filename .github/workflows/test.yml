@@ -59,7 +59,7 @@ jobs:
         shell: powershell
         run: |
           $env:PI_CODING_AGENT_DIR="$env:RUNNER_TEMP\pi-profile"
-          $env:DSH_HOME="$env:RUNNER_TEMP\dsh-profile"
+          $env:DSH_HOME="$env:RUNNER_TEMP\dsh profile 测试"
           $beforePath=$env:PATH
           $beforeRegistry=$env:npm_config_registry
           .\pi.ps1 -Root "$env:RUNNER_TEMP\lmm clients" -NoPath -Network official -InstallOnly

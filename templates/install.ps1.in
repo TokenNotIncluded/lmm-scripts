@@ -54,6 +54,7 @@ function Stop-InstallChild($Process) {
 function Invoke-Bounded([string]$Executable,[string[]]$Arguments) {
     $info=New-Object Diagnostics.ProcessStartInfo
     $info.FileName=$Executable; $info.UseShellExecute=$false
+    if ((Get-Location).Provider.Name -eq 'FileSystem') { $info.WorkingDirectory=(Get-Location).ProviderPath }
     $info.Arguments=($Arguments | ForEach-Object { QuoteArgument $_ }) -join ' '
     $process=New-Object Diagnostics.Process; $process.StartInfo=$info
     $started=$false
@@ -402,7 +403,29 @@ function Invoke-LmmSetup {
         Install-Client '@deepseek-ai/dsh' $DshVersion 'dsh'
         $script:Phase='DSH LMM provider'; $archive=Join-Path $script:Cache ($DshProviderUrl.Split('/')[-1])
         Get-VerifiedFile $DshProviderUrl $archive $DshProviderSha256
-        Invoke-WithRegistryRetry $script:Client @('plugin','--profile',$Profile,'add',$archive,'--ignore-scripts','--store-dir',(Join-Path $script:Cache 'pnpm'))
+        # DSH 0.1.5 uses a shell to invoke pnpm on Windows. Passing absolute
+        # paths containing spaces loses argument boundaries in that layer.
+        # Keep the verified immutable package inside the profile and pass a
+        # path-free file: spec; configure the store through environment instead.
+        $profileHome=$env:DSH_HOME
+        $userDirectory=[Environment]::GetFolderPath('UserProfile')
+        if (!$profileHome) { $profileHome=Join-Path $userDirectory '.dsh' }
+        elseif ($profileHome -eq '~') { $profileHome=$userDirectory }
+        elseif ($profileHome.StartsWith('~/') -or $profileHome.StartsWith('~\')) { $profileHome=Join-Path $userDirectory $profileHome.Substring(2) }
+        if (![IO.Path]::IsPathRooted($profileHome)) { $profileHome=Join-Path (Get-Location).ProviderPath $profileHome }
+        $profileDirectory=Join-Path ([IO.Path]::GetFullPath($profileHome)) "profiles\$Profile"
+        New-Item -ItemType Directory -Path $profileDirectory -Force | Out-Null
+        $packageName='.lmm-provider-'+$DshProviderSha256.Substring(0,16)+'.tgz'
+        $profilePackage=Join-Path $profileDirectory $packageName
+        if (Test-Path -LiteralPath $profilePackage) {
+          if ((Get-Hash $profilePackage) -ne $DshProviderSha256) { throw 'Conflicting installer package in the DSH profile; inspect it before retrying.' }
+        } else {
+          $pending=Join-Path $profileDirectory ('.lmm-package-'+[Guid]::NewGuid().ToString('N')+'.tmp')
+          try { Copy-Item -LiteralPath $archive -Destination $pending; Move-Item -LiteralPath $pending -Destination $profilePackage -Force }
+          finally { if (Test-Path -LiteralPath $pending) { Remove-Item -LiteralPath $pending -Force } }
+        }
+        $env:npm_config_store_dir=Join-Path $script:Cache 'pnpm'
+        Invoke-WithRegistryRetry $script:Client @('plugin','--profile',$Profile,'add',"file:$packageName",'--ignore-scripts')
       }
     }
     $script:Phase='launcher and PATH'; Write-Launcher; $script:InstalledSuccess=$true
@@ -425,7 +448,7 @@ function Invoke-LmmSetup {
   }
 }
 $savedEnvironment=@{}
-foreach($name in @('PATH','npm_config_cache','npm_config_fetch_retries','npm_config_fetch_timeout','npm_config_prefer_offline','npm_config_fetch_retry_mintimeout','npm_config_fetch_retry_maxtimeout','npm_config_strict_ssl','npm_config_registry')) { $savedEnvironment[$name]=[Environment]::GetEnvironmentVariable($name,'Process') }
+foreach($name in @('PATH','npm_config_cache','npm_config_fetch_retries','npm_config_fetch_timeout','npm_config_prefer_offline','npm_config_fetch_retry_mintimeout','npm_config_fetch_retry_maxtimeout','npm_config_strict_ssl','npm_config_registry','npm_config_store_dir')) { $savedEnvironment[$name]=[Environment]::GetEnvironmentVariable($name,'Process') }
 try { Invoke-LmmSetup }
 catch { Write-Error "Stopped during $script:Phase. $($_.Exception.Message)" -ErrorAction Continue; exit 1 }
 finally {
