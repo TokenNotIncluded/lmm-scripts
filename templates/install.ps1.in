@@ -102,8 +102,10 @@ function Test-Node {
   $node = Get-Command node.exe -ErrorAction SilentlyContinue
   $npm = Get-Command npm.cmd -ErrorAction SilentlyContinue
   if (-not $node -or -not $npm) { return $false }
-  & $node.Source -e 'const [a,b]=process.versions.node.split(".").map(Number);process.exit((a===22&&b>=19)||a>=24?0:1)' 2>$null
-  return ($LASTEXITCODE -eq 0)
+  try { $versionText=(& $node.Source --version 2>$null | Out-String).Trim() } catch { return $false }
+  if ($LASTEXITCODE -ne 0 -or $versionText -notmatch '^v([0-9]+)\.([0-9]+)\.[0-9]+') { return $false }
+  $major=[int]$Matches[1];$minor=[int]$Matches[2]
+  return (($major -eq 22 -and $minor -ge 19) -or $major -ge 24)
 }
 function Set-RequestProxy($request) {
             $proxyValue = if ($env:HTTPS_PROXY) { $env:HTTPS_PROXY } else { $env:HTTP_PROXY }

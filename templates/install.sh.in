@@ -38,7 +38,7 @@ while [ "$#" -gt 0 ]; do
     --check) CHECK=1;; --update) FORCE=1;; --launch) LAUNCH=1;;
     --add-path) ADD_PATH=1;; --no-path) ADD_PATH=0;; --install-only) LAUNCH=0;; --no-bootstrap) INSTALL_NODE=0; BOOTSTRAP=0;; --from-source) SOURCE=1;; --no-install-node) INSTALL_NODE=0;;
     --root|--network|--profile)
-      [ "$#" -ge 2 ] && [ -n "$2" ] || fail "$1 requires a value"
+      if [ "$#" -lt 2 ] || [ -z "${2:-}" ]; then fail "$1 requires a value"; fi
       case "$1" in --root) ROOT=$2;; --network) NETWORK=$2;; --profile) PROFILE=$2;; esac; shift;;
     --) shift; RUN_ARGS=("$@"); break;;
     *) fail "Unknown option: $1 (use --help)";;
@@ -57,7 +57,7 @@ done
 ((RETRIES <= 10 && CONNECT_TIMEOUT <= 300 && STALL_TIMEOUT <= 86400 && DOWNLOAD_TIMEOUT <= 86400 && COMMAND_TIMEOUT <= 86400 && MIN_SPEED <= 10485760)) || fail 'Network setting exceeds supported limits.'
 CACHE=${LMM_CACHE_ROOT:-$ROOT/cache}
 case "$CACHE" in /*) ;; *) fail 'LMM_CACHE_ROOT must be an absolute path';; esac
-[ "$CACHE" != / ] && [ ! -L "$ROOT" ] && [ ! -L "$CACHE" ] || fail 'Refusing root or symlink installation/cache paths.'
+if [ "$CACHE" = / ] || [ -L "$ROOT" ] || [ -L "$CACHE" ]; then fail 'Refusing root or symlink installation/cache paths.'; fi
 for custom in "${LMM_NODE_BASE_URL:-}" "${LMM_NPM_REGISTRY:-}"; do
   if [ -n "$custom" ]; then case "$custom" in https://*) ;; *) fail 'Custom mirrors must use HTTPS';; esac
     case "$custom" in *'@'*|*$'\n'*|*$'\r'*) fail 'Custom mirrors must not contain embedded credentials or newlines';; esac
@@ -67,7 +67,7 @@ case "$NETWORK" in auto|official|china) ;; *) fail 'network must be auto, offici
 case "$PROFILE" in web|headless) ;; *) fail 'profile must be web or headless';; esac
 [ "$TARGET" = lmm ] || [ "$SOURCE" = 0 ] || fail '--from-source is only for lmm'
 case "$ROOT" in *$'\n'*|*$'\r'*) fail 'Install path must not contain newlines';; /*) ;; *) ROOT="$PWD/$ROOT";; esac
-[ "$ROOT" != / ] && [ "$ROOT" != "$HOME" ] || fail 'Choose a dedicated installation directory'
+if [ "$ROOT" = / ] || [ "$ROOT" = "$HOME" ]; then fail 'Choose a dedicated installation directory'; fi
 case "$(uname -s)" in Linux) OS=linux;; Darwin) OS=darwin;; *) fail 'This script supports Linux/macOS. On Windows use the .ps1 script.';; esac
 case "$(uname -m)" in x86_64|amd64) ARCH=x64;; arm64|aarch64) ARCH=arm64;; *) fail 'Unsupported CPU; use the documented source build on this platform.';; esac
 PLATFORM="$OS-$ARCH"
@@ -95,14 +95,19 @@ if [ "$CHECK" = 1 ]; then
   log 'Executable check complete; login and model access are not inferred.'
   exit 0
 fi
-cleanup() {
-  rc=$?
-  trap - EXIT
+release_setup() {
   if [ -n "$STAGE" ] && [ -d "$STAGE" ]; then rm -rf -- "$STAGE"; fi
+  STAGE=''
   if [ "$LOCKED" = 1 ] && [ "$(cat "$ROOT/.setup-lock/pid" 2>/dev/null || true)" = "$$" ]; then
     rm -f -- "$ROOT/.setup-lock/pid" "$ROOT/.setup-lock/owner"
     rmdir "$ROOT/.setup-lock" 2>/dev/null || true
   fi
+  LOCKED=0
+}
+cleanup() {
+  rc=$?
+  trap - EXIT
+  release_setup
   if [ "$rc" -ne 0 ]; then
     log "Stopped during $PHASE. Existing launchers were preserved unless installation already completed."
     log 'Check disk space, HTTPS proxy/CA settings, or retry --network official / --network china. Do not disable TLS validation.'
@@ -162,7 +167,7 @@ urls_for() {
 download() {
   local official=$1 destination=$2 expected=$3 index url part attempt actual order transfer_status
   part="$destination.part"
-  [ ! -L "$destination" ] && [ ! -L "$part" ] && [ ! -L "$part.url" ] || fail 'Refusing symlink cache entries'
+  if [ -L "$destination" ] || [ -L "$part" ] || [ -L "$part.url" ]; then fail 'Refusing symlink cache entries'; fi
   if [ "$FORCE" = 0 ] && [ -f "$destination" ] && [ "$(sha256 "$destination")" = "$expected" ]; then log "Cached: ${destination##*/}"; return; fi
   if [ -f "$part" ] && [ "$(sha256 "$part")" = "$expected" ]; then mv -f -- "$part" "$destination"; rm -f -- "$part.url"; return; fi
   command -v curl >/dev/null 2>&1 || fail 'curl is required for downloads. Install it with your OS package manager.'
@@ -362,5 +367,10 @@ esac
 if [ "$LAUNCH" = 1 ]; then
   PHASE='launch'
   if [ "$TARGET" = lmm ] && [ "${#RUN_ARGS[@]}" = 0 ]; then RUN_ARGS=(--help); fi
-  if [ "$TARGET" = dsh ]; then "$ROOT/bin/dsh" --profile "$PROFILE" "${RUN_ARGS[@]}"; else "$ROOT/bin/$TARGET" "${RUN_ARGS[@]}"; fi
+  release_setup
+  trap - EXIT INT TERM
+  if [ "$TARGET" = dsh ]; then exec "$ROOT/bin/dsh" --profile "$PROFILE" ${RUN_ARGS[@]+"${RUN_ARGS[@]}"}
+  elif [ "$TARGET" = pi ] && [ ! -t 0 ] && [ "${#RUN_ARGS[@]}" = 0 ]; then
+    if { true </dev/tty; } 2>/dev/null; then exec "$ROOT/bin/pi" </dev/tty; else fail 'Pi needs an interactive terminal; use the printed command.'; fi
+  else exec "$ROOT/bin/$TARGET" ${RUN_ARGS[@]+"${RUN_ARGS[@]}"}; fi
 fi
