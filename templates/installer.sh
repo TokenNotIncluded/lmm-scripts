@@ -4,9 +4,9 @@ lmm_install_main() {
 set -euo pipefail
 set +x
 umask 077
-APP='dsh'
-PACKAGE='@deepseek-ai/dsh'
-VERSION='0.1.5-rc.1'
+APP='@APP@'
+PACKAGE='@PACKAGE@'
+VERSION='@VERSION@'
 NODE_VERSION='24.21.0'
 check_only=0
 install_only=0

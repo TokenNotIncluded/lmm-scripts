@@ -4,9 +4,9 @@
 param([switch]$Check, [switch]$InstallOnly, [switch]$NoBootstrap,
       [Parameter(ValueFromRemainingArguments=$true)][string[]]$AppArgs = @())
 $ErrorActionPreference = 'Stop'
-$App = 'pi'
-$Package = '@earendil-works/pi-coding-agent'
-$Version = '0.85.1'
+$App = '@APP@'
+$Package = '@PACKAGE@'
+$Version = '@VERSION@'
 $NodeVersion = '24.21.0'
 function Say([string]$Message) { Write-Host "[$App] $Message" }
 function Setting([string]$Name, [int]$Default, [int]$Maximum) {
