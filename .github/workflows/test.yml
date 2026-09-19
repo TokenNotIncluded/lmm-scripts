@@ -12,9 +12,13 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: 24.21.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:
           python-version: '3.x'
       - run: python tools/generate.py --check
@@ -49,3 +53,14 @@ jobs:
           & "$env:RUNNER_TEMP\lmm 测试 tools\bin\lmm.cmd" catalog pi --json
           if ($LASTEXITCODE -ne 0) { throw 'CLI catalog failed' }
           .\lmm.ps1 -Root "$env:RUNNER_TEMP\lmm 测试 tools" -NoPath -Network official
+          .\lmm.ps1 -Root "$env:RUNNER_TEMP\lmm 测试 tools" -Check
+      - name: Install real Pi and DSH on Windows
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $env:PI_CODING_AGENT_DIR="$env:RUNNER_TEMP\pi-profile"
+          $env:DSH_HOME="$env:RUNNER_TEMP\dsh-profile"
+          .\pi.ps1 -Root "$env:RUNNER_TEMP\lmm clients" -NoPath -Network official -InstallOnly
+          .\dsh.ps1 -Root "$env:RUNNER_TEMP\lmm clients" -NoPath -Network official -InstallOnly
+          .\pi.ps1 -Root "$env:RUNNER_TEMP\lmm clients" -Check
+          .\dsh.ps1 -Root "$env:RUNNER_TEMP\lmm clients" -Check

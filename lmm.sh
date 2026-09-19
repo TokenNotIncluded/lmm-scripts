@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
+lmm_install_main() {
 # Generated from templates/install.sh.in and versions.json. No sudo, no API keys.
 set -euo pipefail
+set +x
 TARGET=lmm
 SCRIPT_VERSION=2026.09.19.1
 NODE_VERSION=24.21.0
@@ -28,8 +30,8 @@ lmm_hash() { case "$1" in
 esac; }
 
 ROOT=${LMM_INSTALL_ROOT:-${XDG_DATA_HOME:-$HOME/.local/share}/lmm-tools}
-NETWORK=auto PROFILE=web CHECK=0 FORCE=0 LAUNCH=0 ADD_PATH=1 SOURCE=0 INSTALL_NODE=1
-STAGE='' LOCKED=0 PHASE=arguments
+NETWORK=auto PROFILE=web CHECK=0 FORCE=0 LAUNCH=0 ADD_PATH=0 SOURCE=0 INSTALL_NODE=1
+STAGE='' LOCKED=0 PHASE=arguments BOOTSTRAP=1
 RUN_ARGS=()
 NPM_SELECTED=0
 log() { printf '[lmm %s] %s\n' "$TARGET" "$*" >&2; }
@@ -44,7 +46,10 @@ Usage: bash $TARGET.sh [options] [-- launch arguments]
   --network MODE       auto (latency probes), official, or china
   --profile NAME       DSH: web or headless (default: web)
   --no-install-node    Require an existing compatible Node/npm
-  --no-path            Do not append PATH entries to shell startup files
+  --add-path           Opt in to adding a backed-up shell PATH entry
+  --no-path            Keep startup files unchanged (default)
+  --install-only       Compatibility alias: do not launch
+  --no-bootstrap       Require existing compatible Node and managed client
   --from-source        LMM CLI: build the pinned crate using existing Rust 1.88+
   --launch             Start the installed tool (DSH starts the chosen profile)
   --help               Show this help
@@ -57,7 +62,7 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     --help|-h) usage; exit 0;;
     --check) CHECK=1;; --update) FORCE=1;; --launch) LAUNCH=1;;
-    --no-path) ADD_PATH=0;; --from-source) SOURCE=1;; --no-install-node) INSTALL_NODE=0;;
+    --add-path) ADD_PATH=1;; --no-path) ADD_PATH=0;; --install-only) LAUNCH=0;; --no-bootstrap) INSTALL_NODE=0; BOOTSTRAP=0;; --from-source) SOURCE=1;; --no-install-node) INSTALL_NODE=0;;
     --root|--network|--profile)
       [ "$#" -ge 2 ] && [ -n "$2" ] || fail "$1 requires a value"
       case "$1" in --root) ROOT=$2;; --network) NETWORK=$2;; --profile) PROFILE=$2;; esac; shift;;
@@ -65,6 +70,24 @@ while [ "$#" -gt 0 ]; do
     *) fail "Unknown option: $1 (use --help)";;
   esac
   shift
+done
+RETRIES=${LMM_RETRIES:-3}
+CONNECT_TIMEOUT=${LMM_CONNECT_TIMEOUT:-10}
+STALL_TIMEOUT=${LMM_STALL_TIMEOUT:-20}
+DOWNLOAD_TIMEOUT=${LMM_DOWNLOAD_TIMEOUT:-600}
+COMMAND_TIMEOUT=${LMM_COMMAND_TIMEOUT:-1800}
+MIN_SPEED=${LMM_MIN_SPEED_BYTES:-16384}
+for setting in "$RETRIES" "$CONNECT_TIMEOUT" "$STALL_TIMEOUT" "$DOWNLOAD_TIMEOUT" "$COMMAND_TIMEOUT" "$MIN_SPEED"; do
+  [[ $setting =~ ^[1-9][0-9]*$ && ${#setting} -le 8 ]] || fail 'Timeouts, retry counts and minimum speed must be positive integers.'
+done
+((RETRIES <= 10 && CONNECT_TIMEOUT <= 300 && STALL_TIMEOUT <= 86400 && DOWNLOAD_TIMEOUT <= 86400 && COMMAND_TIMEOUT <= 86400 && MIN_SPEED <= 10485760)) || fail 'Network setting exceeds supported limits.'
+CACHE=${LMM_CACHE_ROOT:-$ROOT/cache}
+case "$CACHE" in /*) ;; *) fail 'LMM_CACHE_ROOT must be an absolute path';; esac
+[ "$CACHE" != / ] && [ ! -L "$ROOT" ] && [ ! -L "$CACHE" ] || fail 'Refusing root or symlink installation/cache paths.'
+for custom in "${LMM_NODE_BASE_URL:-}" "${LMM_NPM_REGISTRY:-}"; do
+  if [ -n "$custom" ]; then case "$custom" in https://*) ;; *) fail 'Custom mirrors must use HTTPS';; esac
+    case "$custom" in *'@'*|*$'\n'*|*$'\r'*) fail 'Custom mirrors must not contain embedded credentials or newlines';; esac
+  fi
 done
 case "$NETWORK" in auto|official|china) ;; *) fail 'network must be auto, official or china';; esac
 case "$PROFILE" in web|headless) ;; *) fail 'profile must be web or headless';; esac
@@ -115,8 +138,8 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-umask 022
-mkdir -p "$ROOT" "$ROOT/cache" "$ROOT/bin" "$ROOT/apps" "$ROOT/runtime"
+umask 077
+mkdir -p "$ROOT" "$CACHE" "$ROOT/bin" "$ROOT/apps" "$ROOT/runtime"
 ROOT=$(cd "$ROOT" && pwd -P)
 if ! mkdir "$ROOT/.setup-lock" 2>/dev/null; then
   oldpid=$(cat "$ROOT/.setup-lock/pid" 2>/dev/null || true)
@@ -165,18 +188,20 @@ urls_for() {
 download() {
   local official=$1 destination=$2 expected=$3 index url part attempt actual order transfer_status
   part="$destination.part"
+  [ ! -L "$destination" ] && [ ! -L "$part" ] && [ ! -L "$part.url" ] || fail 'Refusing symlink cache entries'
   if [ "$FORCE" = 0 ] && [ -f "$destination" ] && [ "$(sha256 "$destination")" = "$expected" ]; then log "Cached: ${destination##*/}"; return; fi
   if [ -f "$part" ] && [ "$(sha256 "$part")" = "$expected" ]; then mv -f -- "$part" "$destination"; rm -f -- "$part.url"; return; fi
   command -v curl >/dev/null 2>&1 || fail 'curl is required for downloads. Install it with your OS package manager.'
+  if [[ $official == https://nodejs.org/dist/* && -n ${LMM_NODE_BASE_URL:-} ]]; then official="${LMM_NODE_BASE_URL%/}/${official#https://nodejs.org/dist/}"; fi
   urls_for "$official"
   if [ "$NETWORK" = auto ]; then order=$(rank_urls "${URLS[@]}"); else order=$(printf '%s\n' "${!URLS[@]}"); fi
   for index in $order; do
     url=${URLS[$index]}
     if [ -f "$part" ] && [ "$(cat "$part.url" 2>/dev/null || true)" != "$url" ]; then rm -f -- "$part"; fi
     printf '%s\n' "$url" > "$part.url"
-    for attempt in 1 2; do
-      log "Downloading ${destination##*/} (source $((index+1)), attempt $attempt; low-speed cutoff 20s)"
-      if curl -q --proto '=https' --proto-redir '=https' -fL --connect-timeout 10 --max-time 600 --speed-time 20 --speed-limit 16384 --continue-at - --output "$part" "$url"; then
+    for ((attempt=1; attempt<=RETRIES; attempt++)); do
+      log "Downloading ${destination##*/} (source $((index+1)), attempt $attempt; low-speed cutoff ${STALL_TIMEOUT}s)"
+      if curl -q --proto '=https' --proto-redir '=https' -fL --connect-timeout "$CONNECT_TIMEOUT" --max-time "$DOWNLOAD_TIMEOUT" --speed-time "$STALL_TIMEOUT" --speed-limit "$MIN_SPEED" --continue-at - --output "$part" "$url"; then
         actual=$(sha256 "$part")
         if [ "$actual" = "$expected" ]; then mv -f -- "$part" "$destination"; rm -f -- "$part.url"; return; fi
         log 'Checksum mismatch: discarded the download; it will not be executed.'
@@ -200,7 +225,7 @@ ensure_node() {
   [ ! -f /etc/alpine-release ] || fail 'On Alpine install nodejs/npm with apk first; official Node archives require glibc.'
   hash=$(node_hash "$PLATFORM")
   [ -n "$hash" ] || fail "No verified Node archive for $PLATFORM"
-  archive="$ROOT/cache/node-v$NODE_VERSION-$PLATFORM.tar.gz"
+  archive="$CACHE/node-v$NODE_VERSION-$PLATFORM.tar.gz"
   download "https://nodejs.org/dist/v$NODE_VERSION/${archive##*/}" "$archive" "$hash"
   mkdir -p "$STAGE/runtime"
   tar -xzf "$archive" -C "$STAGE/runtime"
@@ -212,10 +237,13 @@ ensure_node() {
 configure_npm() {
   if [ -z "${npm_config_cache:-}" ]; then
     npm_config_cache=$(npm config get cache 2>/dev/null || true)
-    case "$npm_config_cache" in /*) ;; *) npm_config_cache="$ROOT/cache/npm";; esac
+    case "$npm_config_cache" in /*) ;; *) npm_config_cache="$CACHE/npm";; esac
     export npm_config_cache
   fi
-  export npm_config_fetch_retries=2 npm_config_fetch_timeout=120000
+  export npm_config_fetch_retries="$RETRIES" npm_config_fetch_timeout="$((STALL_TIMEOUT * 1000))"
+  export npm_config_fetch_retry_mintimeout=2000 npm_config_fetch_retry_maxtimeout=30000
+  export npm_config_strict_ssl=true
+  if [ -n "${LMM_NPM_REGISTRY:-}" ]; then export npm_config_registry="$LMM_NPM_REGISTRY"; fi
   export npm_config_prefer_offline=true
   local current order first
   current=$(npm config get registry 2>/dev/null || true)
@@ -233,18 +261,33 @@ configure_npm() {
   esac
   log 'Selected a registry for this installer process only; global npm settings are unchanged.'
 }
+bounded() {
+  node - "$COMMAND_TIMEOUT" "$@" <<'JS'
+const {spawn}=require('node:child_process');
+const [seconds,command,...args]=process.argv.slice(2);
+const child=spawn(command,args,{stdio:'inherit',detached:true});
+let timedOut=false,stopping=false;
+function stop(code){if(stopping)return;stopping=true;timedOut=code===124;try{process.kill(-child.pid,'SIGTERM')}catch{};const hard=setTimeout(()=>{try{process.kill(-child.pid,'SIGKILL')}catch{}},3000);hard.unref()}
+const start=Date.now();const heartbeat=setInterval(()=>process.stderr.write(`[install] Still working: ${Math.floor((Date.now()-start)/1000)}s elapsed.\n`),15000);
+const timeout=setTimeout(()=>{process.stderr.write('[install] Operation timed out; increase LMM_COMMAND_TIMEOUT for a slow connection.\n');stop(124)},Number(seconds)*1000);
+process.on('SIGINT',()=>stop(130));process.on('SIGTERM',()=>stop(143));
+child.on('error',e=>{clearInterval(heartbeat);clearTimeout(timeout);process.stderr.write(`[install] Cannot start ${command}: ${e.code}\n`);process.exitCode=1});
+child.on('exit',(code,signal)=>{clearInterval(heartbeat);clearTimeout(timeout);process.exitCode=timedOut?124:signal?130:code??1});
+JS
+}
 with_registry_retry() {
-  if "$@" </dev/null; then return; fi
+  if bounded "$@"; then return; fi
   if [ "$NETWORK" = auto ] && [ "$NPM_SELECTED" = 1 ]; then
     if [ "$npm_config_registry" = https://registry.npmjs.org/ ]; then export npm_config_registry=https://registry.npmmirror.com/; else export npm_config_registry=https://registry.npmjs.org/; fi
     log 'Retrying the alternate registry with the same package cache.'
-    "$@" </dev/null
+    bounded "$@"
   else fail 'Package installation failed. Check network/proxy settings or try another --network mode.'; fi
 }
 install_client() {
   local package=$1 version=$2 entry=$3 target="$ROOT/apps/$TARGET/$2" work="$STAGE/client" allow
   PHASE="$TARGET client"
   if [ "$FORCE" = 0 ] && [ -x "$target/bin/$entry" ] && [ -f "$target/.lmm-managed" ] && [ "$(cat "$target/.lmm-managed")" = "$version|$SCRIPT_VERSION" ]; then CLIENT="$target/bin/$entry"; log "Client $version already installed."; return; fi
+  [ "$BOOTSTRAP" = 1 ] || fail 'Managed client is missing; rerun without --no-bootstrap.'
   mkdir -p "$work"
   case "$TARGET" in
     pi) allow='esbuild,@google/genai,protobufjs';;
@@ -272,13 +315,14 @@ install_lmm() {
   if [ "$SOURCE" = 1 ]; then
     command -v cargo >/dev/null 2>&1 || fail 'Source builds need Rust 1.88+ and OS build tools. Install them first, then rerun --from-source.'
     log 'Building the pinned crate; Cargo reuses its existing dependency/build caches. This can take several minutes.'
-    export CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-$ROOT/cache/cargo-target}
+    export CARGO_HTTP_TIMEOUT="$STALL_TIMEOUT" CARGO_NET_RETRY="$RETRIES"
+    export CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-$CACHE/cargo-target}
     cargo install lmm-cli --version "$LMM_VERSION" --locked --root "$STAGE/cargo" </dev/null
     cp -- "$STAGE/cargo/bin/lmm" "$STAGE/lmm/lmm"
   else
     hash=$(lmm_hash "$PLATFORM")
     [ -n "$hash" ] || fail "No prebuilt CLI for $PLATFORM yet. With Rust 1.88+ and build tools, use --from-source."
-    archive="$ROOT/cache/lmm-v$LMM_VERSION-$PLATFORM.tar.gz"
+    archive="$CACHE/lmm-v$LMM_VERSION-$PLATFORM.tar.gz"
     download "$LMM_RELEASE_BASE/${archive##*/}" "$archive" "$hash"
     tar -xzf "$archive" -C "$STAGE/lmm"
   fi
@@ -328,14 +372,14 @@ else
   else
     install_client @deepseek-ai/dsh "$DSH_VERSION" dsh
     PHASE='DSH LMM provider'
-    artifact="$ROOT/cache/${DSH_PROVIDER_URL##*/}"
+    artifact="$CACHE/${DSH_PROVIDER_URL##*/}"
     download "$DSH_PROVIDER_URL" "$artifact" "$DSH_PROVIDER_SHA256"
-    with_registry_retry "$CLIENT" plugin --profile "$PROFILE" add "$artifact" --ignore-scripts --store-dir "$ROOT/cache/pnpm"
+    with_registry_retry "$CLIENT" plugin --profile "$PROFILE" add "$artifact" --ignore-scripts --store-dir "$CACHE/pnpm"
   fi
 fi
 PHASE='launchers and PATH'; write_launcher; add_path
 log "Ready: $ROOT/bin/$TARGET"
-log "New terminals can use $TARGET after the PATH entry is loaded. For this terminal: export PATH=$(quote_sh "$ROOT/bin"):\"\$PATH\""
+log "Use the full command above, or for this terminal: export PATH=$(quote_sh "$ROOT/bin"):\"\$PATH\""
 case "$TARGET" in
   pi) log 'Run pi, then /login -> LMM -> browser approval -> /model.';;
   dsh) log 'Run dsh web -> Settings -> Models -> LMM -> Sign in with LMM -> Open LMM sign-in.'; log 'For headless use, first sign in through a Web profile sharing the same DSH_HOME.';;
@@ -345,4 +389,9 @@ if [ "$LAUNCH" = 1 ]; then
   PHASE='launch'
   if [ "$TARGET" = lmm ] && [ "${#RUN_ARGS[@]}" = 0 ]; then RUN_ARGS=(--help); fi
   if [ "$TARGET" = dsh ]; then "$ROOT/bin/dsh" --profile "$PROFILE" "${RUN_ARGS[@]}"; else "$ROOT/bin/$TARGET" "${RUN_ARGS[@]}"; fi
+fi
+
+}
+if true; then
+  lmm_install_main "$@"
 fi

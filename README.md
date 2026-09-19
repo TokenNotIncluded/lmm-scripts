@@ -45,8 +45,8 @@ powershell -ExecutionPolicy Bypass -File .\pi.ps1 -Check
 - 客户端安装到按版本隔离的目录。仅在客户端和插件步骤成功后切换管理的启动入口；不会覆盖系统 Node 或系统全局 npm 包。
 - 重复运行复用已安装客户端和下载缓存，并通过原生包管理器确认插件。`--update` / `-Update` 重新安装脚本固定的版本，保留旧的版本目录。
 - 并发安装由锁拒绝。Unix 仅自动回收标记明确、进程已不存在的旧锁；未知锁保留供检查。Windows 使用操作系统文件锁，进程退出会释放。
-- Unix 只追加带标记的 PATH 段，已有启动文件先备份，不重复追加；符号链接启动文件不自动修改。Windows 只追加当前用户 PATH。可用 `--no-path` / `-NoPath` 跳过。
-- 修改 PATH 不会改变父终端的环境；安装结束会打印当前终端可立即使用的完整路径和 PATH 命令。新开终端后可直接运行工具名。
+- 默认不修改 PATH 或终端配置；需要时显式传 `--add-path` / `-AddPath`。Unix 追加带标记的段，已有启动文件先备份、不重复追加；符号链接文件不自动修改。Windows 只追加当前用户 PATH。`--no-path` / `-NoPath` 仍可明确保持不变。
+- 修改 PATH 不会改变父终端的环境；安装结束会打印当前终端可立即使用的完整路径和 PATH 命令。使用了 `--add-path` / `-AddPath` 后，新开终端可直接运行工具名；否则使用打印的完整路径。
 - 缓存保留在安装目录 `cache` 下；npm 优先复用用户已有 npm 缓存。不会自动清空其他软件的缓存、配置、凭据或会话。
 
 如果某步失败，脚本返回非零并指出阶段。保留的旧启动入口不会因插件下载失败而被新入口覆盖。安装器并不声称能回滚第三方包管理器的全部内部状态。
@@ -112,5 +112,11 @@ shellcheck *.sh
 python3 tests/test_installers.py
 pwsh -NoProfile -File tests/test-powershell.ps1
 ```
+
+兼容原有的 `generate.py`、`--install-only` / `-InstallOnly` 和 `--no-bootstrap` / `-NoBootstrap` 入口。新版默认只安装；需要安装后启动 DSH 时显式使用 `--launch` / `-Launch`。
+
+原有网络调优环境变量仍保留：`LMM_RETRIES`、`LMM_CONNECT_TIMEOUT`、`LMM_STALL_TIMEOUT`、`LMM_DOWNLOAD_TIMEOUT`、`LMM_COMMAND_TIMEOUT`、`LMM_CACHE_ROOT`、`LMM_NODE_BASE_URL`、`LMM_NPM_REGISTRY`。另可用 `LMM_MIN_SPEED_BYTES` 调整低速门槛。极慢链路可降低门槛并增加总超时，例如 `LMM_MIN_SPEED_BYTES=128 LMM_DOWNLOAD_TIMEOUT=3600 bash dsh.sh`。自定义源必须是没有内嵌凭据的 HTTPS 地址。
+
+Pi/DSH 安装子进程有总超时和每 15 秒的进度心跳，超时或取消会终止本次子进程树；不会让后台 npm 继续写已经清理的暂存目录。POSIX 整个安装器包在完整函数内，管道传输截断时不会执行半个脚本。
 
 只有根目录的八个 `.sh` / `.ps1` 脚本会被网站仓库同步器导入。模板、测试和维护工具不作为公开安装入口。发布时需同时校验各 API 节点提供的脚本内容，避免负载均衡后出现新旧版本混用。

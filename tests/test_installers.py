@@ -1,4 +1,4 @@
-import hashlib,io,json,os,subprocess,tarfile,tempfile,unittest
+import hashlib,io,json,os,subprocess,tarfile,tempfile,unittest,shutil,time
 from pathlib import Path
 P=Path(__file__).resolve().parents[1]
 FAKE=r'''#!/usr/bin/env python3
@@ -8,6 +8,7 @@ name=Path(sys.argv[0]).name;a=sys.argv[1:]
 with open(os.environ['LMM_TEST_LOG'],'a') as f:f.write(json.dumps([name,a])+'\n')
 if name=='uname':print('Linux' if '-s' in a else 'x86_64')
 elif name=='node':
+ if a and a[0]=='-':os.execv(os.environ['LMM_TEST_REAL_NODE'],[os.environ['LMM_TEST_REAL_NODE']]+a)
  if '-e' in a:sys.exit(0 if os.environ.get('LMM_TEST_NODE_OK','1')=='1' else 1)
  print('v24.21.0')
 elif name=='curl':
@@ -26,6 +27,7 @@ elif name=='npm':
  if a[:2]==['config','get']:
   print('https://registry.npmjs.org/' if a[-1]=='registry' else os.environ['LMM_TEST_CACHE']);sys.exit(0)
  if os.environ.get('LMM_TEST_NPM_FAIL')=='1':sys.exit(9)
+ if os.environ.get('LMM_TEST_NPM_SLEEP'):__import__('time').sleep(int(os.environ['LMM_TEST_NPM_SLEEP']))
  prefix=Path(a[a.index('--prefix')+1]);cmd='pi' if any('@earendil-works/pi-coding-agent@' in x for x in a) else 'dsh'
  (prefix/'bin').mkdir(parents=True,exist_ok=True)
  body='#!/usr/bin/env bash\nprintf "%s\\n" "'+cmd+' 0.1"\nif [ "${LMM_TEST_PLUGIN_FAIL:-0}" = 1 ] && [ "${1:-}" != --version ]; then exit 8; fi\n'
@@ -40,7 +42,7 @@ class InstallerTests(unittest.TestCase):
   self.archive=self.base/'fixture.tar.gz'
   with tarfile.open(self.archive,'w:gz') as t:
    data=b'#!/usr/bin/env bash\necho "lmm 0.1.0"\n';x=tarfile.TarInfo('lmm');x.size=len(data);x.mode=0o755;t.addfile(x,io.BytesIO(data))
-  self.env=dict(os.environ,PATH=str(self.bin)+os.pathsep+os.environ['PATH'],LMM_TEST_LOG=str(self.log),LMM_TEST_ARCHIVE=str(self.archive),LMM_TEST_CACHE=str(self.base/'npm-cache'))
+  self.env=dict(os.environ,PATH=str(self.bin)+os.pathsep+os.environ['PATH'],LMM_TEST_REAL_NODE=shutil.which('node'),LMM_TEST_LOG=str(self.log),LMM_TEST_ARCHIVE=str(self.archive),LMM_TEST_CACHE=str(self.base/'npm-cache'))
   for k in list(self.env):
    if k.lower().startswith('npm_config_'):self.env.pop(k)
  def tearDown(self):self.tmp.cleanup()
@@ -82,6 +84,22 @@ class InstallerTests(unittest.TestCase):
  def test_dsh_profile_and_verified_package(self):
   result=self.run_script('dsh','--profile','headless',fixture=True);self.assertEqual(result.returncode,0,result.stderr)
   self.assertTrue((self.root/'bin/dsh').exists())
+ def test_timeout_and_legacy_flags(self):
+  start=time.monotonic();r=self.run_script('pi',env={'LMM_COMMAND_TIMEOUT':'1','LMM_TEST_NPM_SLEEP':'10'})
+  self.assertNotEqual(r.returncode,0);self.assertLess(time.monotonic()-start,7);self.assertIn('timed out',r.stderr);self.assertFalse((self.root/'bin/pi').exists())
+  r=self.run_script('pi','--no-bootstrap');self.assertNotEqual(r.returncode,0)
+  r=self.run_script('pi',env={'LMM_RETRIES':'0'});self.assertNotEqual(r.returncode,0)
+ def test_truncated_pipe_never_runs_prefix(self):
+  body=(P/'pi.sh').read_text().split('if true; then')[0]
+  r=subprocess.run(['bash','-s','--','--root',str(self.root),'--no-path'],input=body,env=self.env,text=True,capture_output=True)
+  self.assertFalse(self.root.exists());self.assertEqual(self.calls(),[])
+ def test_custom_cache_registry_and_mirror_validation(self):
+  cache=self.base/'separate cache';r=self.run_script('lmm',env={'LMM_CACHE_ROOT':str(cache)},fixture=True)
+  self.assertEqual(r.returncode,0,r.stderr);self.assertTrue(list(cache.glob('*.tar.gz')))
+  r=self.run_script('pi',env={'LMM_NODE_BASE_URL':'http://bad.invalid'});self.assertNotEqual(r.returncode,0)
+  r=self.run_script('pi',env={'LMM_NPM_REGISTRY':'https://user:secret@bad.invalid'});self.assertNotEqual(r.returncode,0)
+ def test_generated_files_match_templates(self):
+  subprocess.run(['python3',str(P/'tools/generate.py'),'--check'],check=True)
  def test_usage_preserves_preview_exit_code(self):
   (self.root/'bin').mkdir(parents=True);f=self.root/'bin/lmm';f.write_text('#!/bin/sh\nexit 3\n');f.chmod(0o755)
   r=subprocess.run(['bash',str(P/'lmm-use.sh'),'plan','pi'],env=self.env|{'LMM_INSTALL_ROOT':str(self.root)},capture_output=True,text=True)

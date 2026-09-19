@@ -16,6 +16,8 @@ for target in ['pi','dsh','lmm']:
   ps+=f'${name} = @{{\n'+''.join(f"  '{platform}' = '{sha}'\n" for platform,sha in v[key].items())+'}\n'
  for ext,constants in [('sh',sh),('ps1',ps)]:
   body=(P/'templates'/f'install.{ext}.in').read_text().replace('@@CONSTANTS@@',constants)
+  if ext=='sh':
+   lines=body.splitlines(keepends=True);body=lines[0]+'lmm_install_main() {\n'+''.join(lines[1:])+'\n}\nif true; then\n  lmm_install_main "$@"\nfi\n'
   if ext=='ps1':body.encode('ascii')
   path=P/f'{target}.{ext}'
   if args.check:
