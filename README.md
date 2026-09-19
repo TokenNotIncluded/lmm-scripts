@@ -1,27 +1,14 @@
-# LMM scripts
+# LMM Forge scripts
 
-Cross-platform setup scripts for the LMM tools.
+This directory is the default script repository for LMM Forge. The web
+console can pull any Git repository containing the supported files below and
+publish them at `/scripts`.
 
-Scripts are intended for interactive use. They install into the current user's
-Node environment and do not use `sudo` or administrator privileges by default.
-Review a script before running it.
+Supported extensions are `.sh`, `.bash`, `.zsh`, `.ps1`, `.cmd`, and `.bat`.
+Keep scripts self-contained, reviewable, and free of credentials. The public
+page records how often each script is fetched.
 
-## Linux / macOS
+## Included scripts
 
-```sh
-bash install-pi.sh
-bash install-dsh.sh
-bash install-ai-tools.sh
-```
-
-## Windows PowerShell
-
-```powershell
-Set-ExecutionPolicy -Scope Process Bypass
-.\install-pi.ps1
-.\install-dsh.ps1
-.\install-ai-tools.ps1
-```
-
-Set `LMM_PI_PLUGIN` or `LMM_DSH_PLUGIN` to a package name to install an
-optional plugin after the provider itself.
+- `dsh.sh` / `dsh.ps1`: start DeepSeek Harness Web.
+- `pi.sh` / `pi.ps1`: install the LMM Pi provider.
