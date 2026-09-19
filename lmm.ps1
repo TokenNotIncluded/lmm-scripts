@@ -10,7 +10,7 @@ param(
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-$Target = 'pi'
+$Target = 'lmm'
 $ScriptVersion = '2026.09.19.1'
 $NodeVersion = '24.21.0'
 $PiVersion = '0.85.1'

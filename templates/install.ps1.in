@@ -10,30 +10,7 @@ param(
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-$Target = 'pi'
-$ScriptVersion = '2026.09.19.1'
-$NodeVersion = '24.21.0'
-$PiVersion = '0.85.1'
-$PiProviderVersion = '0.1.0-alpha.1'
-$DshVersion = '0.1.5-rc.2'
-$DshProviderUrl = 'https://github.com/TokenNotIncluded/dsh-lmm-provider/releases/download/v0.1.0-alpha.2/tokennotincluded-dsh-lmm-provider-0.1.0-alpha.2.tgz'
-$DshProviderSha256 = '609eba9f1516cadf7086e44d290752d1361ac607eb1d1cb5682abfa5e806304d'
-$LmmVersion = '0.1.0'
-$LmmReleaseBase = 'https://github.com/TokenNotIncluded/api.lmm.best/releases/download/lmm-cli-v0.1.0'
-$NodeHashes = @{
-  'linux-x64' = '6e1db87ef58b8819e5d5402eff1536491b18edd8eb7bee5ef7897876e88dc5ff'
-  'linux-arm64' = '724282c3b43aec998aa9527380465b45d229e021b58035f5f4f63095eabfe5d5'
-  'darwin-x64' = '1462cb3b3046b815cf8ea436d3da450ec1a9f11dac7e5a46b0ada5305d7e8097'
-  'darwin-arm64' = 'bed7eea5325e1108f32ce5228ddd6a5f0f08a499ee42aa7442aea583702f6057'
-  'win-x64' = '158f7685b44de51f6c0df1d153526cbcd3e1bc739a8dfc607721cef75de9e541'
-  'win-arm64' = '8779b1bde1d39f8d420e3b57aa657b39891af434d3de44a919044cec06785921'
-}
-$LmmHashes = @{
-  'linux-x64' = '292a1ff8b599466f52747867a0b14bd14860faefaa085cc60746040cd7eba9b7'
-  'darwin-arm64' = '8f6b3a2d08500566b528b7089664420d3395e464c172e3a43dfcb73d37f57b3f'
-  'win-x64' = 'd0eb3c3d3fe695eaa8a85de7c3161d0f7f17153064db5c20b8ced09defc574a9'
-}
-
+@@CONSTANTS@@
 $script:Stage = $null; $script:LockHandle = $null; $script:Phase = 'arguments'
 $script:Client = $null; $script:NodeBin = $null; $script:NpmSelected = $false
 function Write-Log([string]$Message) { Write-Host "[lmm $Target] $Message" }

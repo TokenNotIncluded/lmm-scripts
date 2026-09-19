@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Generated from templates/install.sh.in and versions.json. No sudo, no API keys.
 set -euo pipefail
-TARGET=pi
+TARGET=lmm
 SCRIPT_VERSION=2026.09.19.1
 NODE_VERSION=24.21.0
 PI_VERSION=0.85.1

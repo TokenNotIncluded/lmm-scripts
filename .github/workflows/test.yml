@@ -1,0 +1,51 @@
+name: Installer checks
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  checks:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - run: python tools/generate.py --check
+      - name: Shell fault-injection tests
+        if: runner.os != 'Windows'
+        run: python3 tests/test_installers.py
+      - name: ShellCheck
+        if: runner.os == 'Linux'
+        run: shellcheck *.sh
+      - name: PowerShell checks
+        shell: pwsh
+        run: ./tests/test-powershell.ps1
+      - name: Windows PowerShell 5.1 checks
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: .\tests\test-powershell.ps1
+      - name: Install real CLI on Unix
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          bash lmm.sh --root "$RUNNER_TEMP/lmm tools" --no-path --network official
+          "$RUNNER_TEMP/lmm tools/bin/lmm" --version
+          "$RUNNER_TEMP/lmm tools/bin/lmm" catalog pi --json
+          bash lmm.sh --root "$RUNNER_TEMP/lmm tools" --no-path --network official
+      - name: Install real CLI on Windows
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          .\lmm.ps1 -Root "$env:RUNNER_TEMP\lmm 测试 tools" -NoPath -Network official
+          & "$env:RUNNER_TEMP\lmm 测试 tools\bin\lmm.cmd" --version
+          if ($LASTEXITCODE -ne 0) { throw 'CLI version failed' }
+          & "$env:RUNNER_TEMP\lmm 测试 tools\bin\lmm.cmd" catalog pi --json
+          if ($LASTEXITCODE -ne 0) { throw 'CLI catalog failed' }
+          .\lmm.ps1 -Root "$env:RUNNER_TEMP\lmm 测试 tools" -NoPath -Network official
