@@ -5,7 +5,7 @@
 | 脚本 | 完成的工作 |
 |---|---|
 | `pi.sh` / `pi.ps1` | 检查/补齐 Node.js 和 npm，安装已验证版本的 Pi，安装 LMM provider，创建启动入口，引导 `/login` 和 `/model` |
-| `dsh.sh` / `dsh.ps1` | 检查/补齐 Node.js，安装 DSH，下载并校验编译好的 LMM 插件，装进指定 profile，引导网页登录 |
+| `dsh.sh` / `dsh.ps1` | 检查/补齐 Node.js 与私有 pnpm，安装 DSH，下载并校验编译好的 LMM 插件，装进指定 profile，引导网页登录 |
 | `lmm.sh` / `lmm.ps1` | 安装 LMM CLI 预编译包；也可显式使用已有 Rust 工具链从 crates.io 构建 |
 | `lmm-use.sh` / `lmm-use.ps1` | 软件目录、状态、诊断、接入预览、登录、模型目录和退出的快捷入口，保留 CLI 的真实退出码 |
 

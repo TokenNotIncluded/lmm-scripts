@@ -8,6 +8,7 @@ NETWORK=auto PROFILE=web CHECK=0 FORCE=0 LAUNCH=0 ADD_PATH=0 SOURCE=0 INSTALL_NO
 STAGE='' LOCKED=0 PHASE=arguments BOOTSTRAP=1
 RUN_ARGS=()
 NPM_SELECTED=0
+PNPM_BIN=''
 log() { printf '[lmm %s] %s\n' "$TARGET" "$*" >&2; }
 fail() { log "ERROR: $*"; exit 1; }
 usage() {
@@ -262,6 +263,27 @@ with_registry_retry() {
     bounded "$@"
   else fail 'Package installation failed. Check network/proxy settings or try another --network mode.'; fi
 }
+ensure_pnpm() {
+  PHASE='DSH package manager'
+  local directory="$ROOT/tools/pnpm/$PNPM_VERSION" work="$STAGE/pnpm"
+  if [ -x "$directory/bin/pnpm" ] && [ -f "$directory/.lmm-managed" ]; then PNPM_BIN="$directory/bin"
+  elif [ "$BOOTSTRAP" = 0 ]; then
+    command -v pnpm >/dev/null 2>&1 || fail 'pnpm is missing; rerun without --no-bootstrap.'
+    bounded pnpm --version
+    PNPM_BIN=$(dirname "$(command -v pnpm)")
+  else
+    mkdir -p "$work" "$(dirname "$directory")"
+    with_registry_retry npm install --global --prefix "$work" --ignore-scripts --no-audit --no-fund "pnpm@$PNPM_VERSION"
+    bounded "$work/bin/pnpm" --version
+    printf '%s\n' "$PNPM_VERSION" > "$work/.lmm-managed"
+    if [ -e "$directory" ]; then
+      [ -f "$directory/.lmm-managed" ] || fail "Unowned package-manager directory: $directory"
+      directory="$directory-reinstall-$(date +%s)-$$"
+    fi
+    mv -- "$work" "$directory"; PNPM_BIN="$directory/bin"
+  fi
+  export PATH="$PNPM_BIN:$PATH"
+}
 install_client() {
   local package=$1 version=$2 entry=$3 target="$ROOT/apps/$TARGET/$2" work="$STAGE/client" allow
   PHASE="$TARGET client"
@@ -319,7 +341,7 @@ write_launcher() {
     printf '#!/usr/bin/env bash\n# Managed by LMM installers.\n'
     # The launcher must expand PATH when it runs, not while it is generated.
     # shellcheck disable=SC2016
-    if [ "$TARGET" != lmm ]; then printf 'export PATH=%s:"$PATH"\n' "$(quote_sh "$NODE_BIN")"; fi
+    if [ "$TARGET" != lmm ]; then printf 'export PATH=%s:"$PATH"\n' "$(quote_sh "$NODE_BIN${PNPM_BIN:+:$PNPM_BIN}")"; fi
     printf 'exec %s "$@"\n' "$(quote_sh "$CLIENT")"
   } > "$temp"
   chmod +x "$temp"
@@ -349,6 +371,7 @@ else
     install_client @earendil-works/pi-coding-agent "$PI_VERSION" pi
     PHASE='Pi LMM provider'; with_registry_retry "$CLIENT" install "npm:@tokennotincluded/pi-lmm-provider@$PI_PROVIDER_VERSION"
   else
+    ensure_pnpm
     install_client @deepseek-ai/dsh "$DSH_VERSION" dsh
     PHASE='DSH LMM provider'
     artifact="$CACHE/${DSH_PROVIDER_URL##*/}"

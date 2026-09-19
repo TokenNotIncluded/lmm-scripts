@@ -16,6 +16,7 @@ $ScriptVersion = '2026.09.19.1'
 $NodeVersion = '24.21.0'
 $PiVersion = '0.85.1'
 $PiProviderVersion = '0.1.0-alpha.1'
+$PnpmVersion = '11.7.0'
 $DshVersion = '0.1.5-rc.2'
 $DshProviderUrl = 'https://github.com/TokenNotIncluded/dsh-lmm-provider/releases/download/v0.1.0-alpha.2/tokennotincluded-dsh-lmm-provider-0.1.0-alpha.2.tgz'
 $DshProviderSha256 = '609eba9f1516cadf7086e44d290752d1361ac607eb1d1cb5682abfa5e806304d'
@@ -38,6 +39,7 @@ $LmmHashes = @{
 $script:Stage = $null; $script:LockHandle = $null; $script:Phase = 'arguments'
 $Retries=3; $ConnectTimeout=10; $StallTimeout=20; $DownloadTimeout=600; $CommandTimeout=1800; $MinSpeed=16384
 $script:Cache=$null
+$script:PnpmBin=$null
 $script:Client = $null; $script:NodeBin = $null; $script:NpmSelected = $false
 function Write-Log([string]$Message) { Write-Host "[lmm $Target] $Message" }
 function Stop-Setup([string]$Message) { throw $Message }
@@ -110,6 +112,7 @@ function Invoke-Native([string]$Command, [string[]]$Arguments) {
     switch ([IO.Path]::GetFileName($Command).ToLowerInvariant()) {
       'npm.cmd' { $entry=Join-Path $parent 'node_modules\npm\bin\npm-cli.js' }
       'pi.cmd' { $entry=Join-Path $parent 'node_modules\@earendil-works\pi-coding-agent\dist\bundle\cli.js' }
+      'pnpm.cmd' { $entry=Join-Path $parent 'node_modules\pnpm\bin\pnpm.cjs' }
       'dsh.cmd' { $entry=Join-Path $parent 'node_modules\@deepseek-ai\dsh\lib\bin.js' }
       default { throw 'Unsupported command shim; use the managed installer or a native executable.' }
     }
@@ -276,6 +279,27 @@ function Invoke-WithRegistryRetry([string]$Command,[string[]]$Arguments) {
     Invoke-Native $Command $Arguments
   }
 }
+function Install-Pnpm {
+  $script:Phase='DSH package manager';$destination=Join-Path $Root "tools\pnpm\$PnpmVersion"
+  if ((Test-Path -LiteralPath (Join-Path $destination 'pnpm.cmd')) -and (Test-Path -LiteralPath (Join-Path $destination '.lmm-managed'))) { $script:PnpmBin=$destination }
+  elseif ($NoBootstrap) {
+    $pm=Get-Command pnpm.cmd -ErrorAction SilentlyContinue
+    if (!$pm) { throw 'pnpm is missing; rerun without -NoBootstrap.' }
+    Invoke-Native $pm.Source @('--version');$script:PnpmBin=Split-Path $pm.Source
+  } else {
+    $work=Join-Path $script:Stage 'pnpm';New-Item -ItemType Directory -Path $work | Out-Null
+    Invoke-WithRegistryRetry (Get-Command npm.cmd).Source @('install','--global','--prefix',$work,'--ignore-scripts','--no-audit','--no-fund',"pnpm@$PnpmVersion")
+    Invoke-Native (Join-Path $work 'pnpm.cmd') @('--version')
+    Set-Content -LiteralPath (Join-Path $work '.lmm-managed') -Value $PnpmVersion
+    New-Item -ItemType Directory -Path (Split-Path $destination) -Force | Out-Null
+    if (Test-Path -LiteralPath $destination) {
+      if (!(Test-Path -LiteralPath (Join-Path $destination '.lmm-managed'))) { throw 'Unowned pnpm installation directory.' }
+      $destination+='-reinstall-'+[Guid]::NewGuid().ToString('N')
+    }
+    Move-Item -LiteralPath $work -Destination $destination;$script:PnpmBin=$destination
+  }
+  $env:PATH="$script:PnpmBin;$env:PATH"
+}
 function Install-Client([string]$Package,[string]$Version,[string]$Entry) {
   $script:Phase="$Target client"; $destination=Join-Path $Root "apps\$Target\$Version"
   if (-not $Update -and (Test-Path -LiteralPath (Join-Path $destination "$Entry.cmd")) -and (Test-Path -LiteralPath (Join-Path $destination '.lmm-managed')) -and (Get-Content -LiteralPath (Join-Path $destination '.lmm-managed') -Raw).Trim() -eq "$Version|$ScriptVersion") { $script:Client=Join-Path $destination "$Entry.cmd"; return }
@@ -336,6 +360,10 @@ function Write-Launcher {
     $nodeRelative=$script:NodeBin.Substring($Root.Length).TrimStart('\')
     $lines+=@("set `"PATH=%~dp0..\$nodeRelative;%PATH%`"")
   }
+  if ($script:PnpmBin -and $script:PnpmBin.StartsWith($Root + '\',[StringComparison]::OrdinalIgnoreCase)) {
+    $pmRelative=$script:PnpmBin.Substring($Root.Length).TrimStart('\')
+    $lines+=@("set `"PATH=%~dp0..\$pmRelative;%PATH%`"")
+  }
   $lines+=@("`"%~dp0..\$clientRelative`" %*")
   $temporary=Join-Path $script:Stage 'launcher.cmd'
   [IO.File]::WriteAllLines($temporary,$lines,[Text.UTF8Encoding]::new($false))
@@ -393,6 +421,7 @@ function Invoke-LmmSetup {
         Install-Client '@earendil-works/pi-coding-agent' $PiVersion 'pi'
         $script:Phase='Pi LMM provider'; Invoke-WithRegistryRetry $script:Client @('install',"npm:@tokennotincluded/pi-lmm-provider@$PiProviderVersion")
       } else {
+        Install-Pnpm
         Install-Client '@deepseek-ai/dsh' $DshVersion 'dsh'
         $script:Phase='DSH LMM provider'; $archive=Join-Path $script:Cache ($DshProviderUrl.Split('/')[-1])
         Get-VerifiedFile $DshProviderUrl $archive $DshProviderSha256

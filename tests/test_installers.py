@@ -28,7 +28,7 @@ elif name=='npm':
   print('https://registry.npmjs.org/' if a[-1]=='registry' else os.environ['LMM_TEST_CACHE']);sys.exit(0)
  if os.environ.get('LMM_TEST_NPM_FAIL')=='1':sys.exit(9)
  if os.environ.get('LMM_TEST_NPM_SLEEP'):__import__('time').sleep(int(os.environ['LMM_TEST_NPM_SLEEP']))
- prefix=Path(a[a.index('--prefix')+1]);cmd='pi' if any('@earendil-works/pi-coding-agent@' in x for x in a) else 'dsh'
+ prefix=Path(a[a.index('--prefix')+1]);cmd='pi' if any('@earendil-works/pi-coding-agent@' in x for x in a) else ('pnpm' if any(x.startswith('pnpm@') for x in a) else 'dsh')
  (prefix/'bin').mkdir(parents=True,exist_ok=True)
  body='#!/usr/bin/env bash\nprintf "%s\\n" "'+cmd+' 0.1"\nif [ "${LMM_TEST_PLUGIN_FAIL:-0}" = 1 ] && [ "${1:-}" != --version ]; then exit 8; fi\n'
  f=prefix/'bin'/cmd;f.write_text(body);f.chmod(0o755)

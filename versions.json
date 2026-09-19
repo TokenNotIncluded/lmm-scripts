@@ -20,5 +20,6 @@
     "linux-x64": "292a1ff8b599466f52747867a0b14bd14860faefaa085cc60746040cd7eba9b7",
     "darwin-arm64": "8f6b3a2d08500566b528b7089664420d3395e464c172e3a43dfcb73d37f57b3f",
     "win-x64": "d0eb3c3d3fe695eaa8a85de7c3161d0f7f17153064db5c20b8ced09defc574a9"
-  }
+  },
+  "pnpm_version": "11.7.0"
 }
