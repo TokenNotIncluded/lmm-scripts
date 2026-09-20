@@ -29,7 +29,7 @@ jobs:
                 # shellcheck disable=SC1090
                 . "${LMM_OS_RELEASE:-/etc/os-release}"
               fi
-              case " $ID $ID_LIKE " in'''.replace('\n          ', '\n'), '''    local distro_info
+              case " $ID $ID_LIKE " in''', '''    local distro_info
               distro_info=$(
                 ID='' ID_LIKE=''
                 if [ -f "${LMM_OS_RELEASE:-/etc/os-release}" ]; then
@@ -39,7 +39,7 @@ jobs:
                 fi
                 printf '%s %s\\n' "$ID" "$ID_LIKE"
               )
-              case " $distro_info " in'''.replace('\n          ', '\n'))
+              case " $distro_info " in''')
           replace('tests/test_external.py', "elif name=='ldd':", "elif name=='realpath': print(os.path.realpath(args[-1]))\nelif name=='ldd':")
           replace('tests/test_external.py', "('uname','ldd','curl','proot-distro',", "('uname','realpath','ldd','curl','proot-distro',")
           replace('tests/test_external.py', "self.release.write_text(f'ID={distro}\\n')", "self.release.write_text(f'ID={distro}\\nVERSION=\"24.04.5 LTS (Noble Numbat)\"\\nNAME=\"Fixture Linux\"\\n')")
@@ -52,7 +52,7 @@ jobs:
                   self.assertEqual(r.returncode, 0, r.stderr)
                   self.assertEqual((self.base/'args').read_text().splitlines(), ['--release', '1.2.3'])
 
-              def test_partial_upstream_script_is_not_executed(self):'''.replace('\n          ', '\n'))
+              def test_partial_upstream_script_is_not_executed(self):''')
           p=Path('tools/catalog.py')
           with p.open('a',encoding='utf-8') as f:
               f.write("MANAGED = tuple(name for name, _, kind in TOOLS if kind == 'managed')\n")
