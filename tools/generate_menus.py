@@ -7,7 +7,7 @@ import subprocess
 from catalog import TOOLS
 from render import ROOT, emit, libraries, template
 
-revision='a5e8b423bfa3ac8176bc6735da00339ffff811e9'
+revision='1d2fb99abe87d8af2cd3a17489cadd32cabcc189'
 
 
 def main():

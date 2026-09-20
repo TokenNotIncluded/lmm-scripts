@@ -15,13 +15,13 @@ function Show-Tools { for ($i=0; $i -lt $tools.Count; $i++) { Write-Output "$($i
 if ($Help) { Write-Output 'LMM menu: .\menu.ps1 [-List]'; exit 0 }
 if ($List) { Show-Tools; exit 0 }
 $hashes=@{
-  'pi.ps1' = 'f5c1fa6f32b948dceab748a764097d00354b1bf1780452662710d2bb3eb873e4'
-  'dsh.ps1' = '3f860eaf6db01fc9e22221bcc4d1e6c8c5e03610644a972b835b7e60f8136543'
-  'lmm.ps1' = 'f3fccb41d48d4f76c6fb896c6f9cee2c38adcd399a04a0c118a0bf658ebc820b'
-  'codex.ps1' = '12db2701adc5c99be542d816de4d33da204b0b2831afef0e8473db1be7d44ffc'
-  'claude-code.ps1' = '0a806c261592b1720f21d549d10ee2dba9c736cff74f2b6641c81c0e328abe5c'
-  'cc-switch.ps1' = 'e2512a44170235011ffd3c7e3e61b5a55f9a4105178baa3d46cabcc641335da6'
-  'clash-verge-rev.ps1' = '18968d7173d706ded660d587a17dc7c77b72d03652c9b853b25b8b42c21cc8a4'
+  'pi.ps1' = 'e64cfb40182d8edbf80c17a28c5ce3cc5e22c1179b52e94a8ea140996ab3de9b'
+  'dsh.ps1' = 'a0c9ff55a3445bcacf35b64e6a1b96e65a28aebf45fd1c3c221a464efa0dedf7'
+  'lmm.ps1' = '6df5d2ffe8ad8b65a1bcf60570f4eb086dbbd8c22f1f5dbc5e99359d97b61c0e'
+  'codex.ps1' = '79ee4587b25a4e8b45bcf035a9bed1b8abee6d2f98552eb4defc11c183e642ab'
+  'claude-code.ps1' = 'ecf5df65c96ba8c4f6265264d2ba381e942eb09fe262d769ab607d4c1d592ec6'
+  'cc-switch.ps1' = '2f0270b3261d22f20d8f01fb4fde8c5d588aaa61499f5b3a89916727c7e742cc'
+  'clash-verge-rev.ps1' = '0a3b5a66631082e96eeabdc8c9b242302e9bc1a42438f2517e2658d87fb814bf'
   'lmm-use.ps1' = 'ac137e30b6609580cb6ee4fbb60ed77ed01ec6153b733140540d5bc38d9179c1'
 }
 $network='auto'; $root=$env:LMM_INSTALL_ROOT
@@ -34,7 +34,7 @@ function Fetch-Script([string]$Name) {
   if (!$hashes.ContainsKey($Name)) { throw 'Unknown script' }
   $path=Join-Path $work $Name
   if ((Test-Path -LiteralPath $path) -and (Get-FileHash -LiteralPath $path).Hash -eq $hashes[$Name]) { return $path }
-  foreach ($url in @("https://api.lmm.best/scripts/$Name","https://raw.githubusercontent.com/TokenNotIncluded/lmm-scripts/a5e8b423bfa3ac8176bc6735da00339ffff811e9/$Name")) {
+  foreach ($url in @("https://api.lmm.best/scripts/$Name","https://raw.githubusercontent.com/TokenNotIncluded/lmm-scripts/1d2fb99abe87d8af2cd3a17489cadd32cabcc189/$Name")) {
     for ($attempt=1; $attempt -le 3; $attempt++) {
       try {
         Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $path -TimeoutSec 120
