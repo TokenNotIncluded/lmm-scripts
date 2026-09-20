@@ -3,7 +3,7 @@ lmm_entry() {
 set -euo pipefail
 # shellcheck disable=SC2034
 TARGET=cc-switch
-LIB_REVISION=cced5d9313020a87b10774a1445d5e44a973a7fa
+LIB_REVISION=7a42eebbdf13cb350f25aca8c466b1ec8964df15
 for arg in "$@"; do
   case "$arg" in --) break;; --help|-h)
     printf '%s\n' "Install $TARGET" 'Options: --check --update --launch --dry-run --install-deps' '         --root PATH --version VERSION --network auto|official|china' '         --distro NAME (Termux Linux guest; default ubuntu) -- [launch arguments]' 'Uses upstream locations and update policies. LMM_LIB_DIR selects local helpers.'

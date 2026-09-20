@@ -12,8 +12,8 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $Target = 'dsh'
-$ScriptVersion = '2026.09.20.5'
-$LibRevision = 'cced5d9313020a87b10774a1445d5e44a973a7fa'
+$ScriptVersion = '2026.09.21.1'
+$LibRevision = '7a42eebbdf13cb350f25aca8c466b1ec8964df15'
 $NodeVersion = '24.21.0'
 $PnpmVersion = '11.7.0'
 $DshVersion = '0.1.5-rc.2'
