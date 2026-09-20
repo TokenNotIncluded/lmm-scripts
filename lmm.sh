@@ -4,7 +4,7 @@ lmm_install_main() {
 set -euo pipefail
 set +x
 TARGET=lmm
-SCRIPT_VERSION=2026.09.19.1
+SCRIPT_VERSION=2026.09.20.1
 NODE_VERSION=24.21.0
 PI_VERSION=0.85.1
 PI_PROVIDER_VERSION=0.1.0-alpha.1
@@ -43,7 +43,7 @@ usage() {
 LMM $TARGET installer $SCRIPT_VERSION
 Usage: bash $TARGET.sh [options] [-- launch arguments]
   --check              Read-only environment/installation check
-  --update             Reinstall the versions tested by this script
+  --update             Reinstall the versions pinned in versions.json
   --root PATH          User-owned install directory (default: $ROOT)
   --network MODE       auto (latency probes), official, or china
   --profile NAME       DSH: web or headless (default: web)
@@ -55,9 +55,7 @@ Usage: bash $TARGET.sh [options] [-- launch arguments]
   --from-source        LMM CLI: build the pinned crate using existing Rust 1.88+
   --launch             Start the installed tool (DSH starts the chosen profile)
   --help               Show this help
-Installs in user space. Existing system Node, npm configuration and login data
-are not replaced. Downloads are cached, resumed and SHA-256 checked. Proxy/CA
-settings are inherited. No login, paid call or OS package install is automatic.
+No automatic login or PATH changes. Versions and platform notes: README.md.
 USAGE
 }
 while [ "$#" -gt 0 ]; do
@@ -225,6 +223,10 @@ download() {
 ensure_node() {
   PHASE='Node.js runtime'
   if compatible_node; then NODE_BIN=$(dirname "$(command -v node)"); log "Using Node $(node --version)"; return; fi
+  # Android uses bionic, not the glibc used by the Linux Node archives.
+  if [ -n "${TERMUX_VERSION:-}" ] || [[ ${PREFIX:-} == */com.termux/files/usr ]]; then
+    fail 'In Termux, install Node with: pkg install nodejs git termux-api; then rerun. Desktop Linux Node archives cannot run on Android.'
+  fi
   local dir="$ROOT/runtime/node-v$NODE_VERSION-$PLATFORM" hash archive
   if [ -x "$dir/bin/node" ]; then export PATH="$dir/bin:$PATH"; fi
   if compatible_node; then NODE_BIN="$dir/bin"; return; fi
@@ -317,13 +319,15 @@ install_client() {
   if [ "$FORCE" = 0 ] && [ -x "$target/bin/$entry" ] && [ -f "$target/.lmm-managed" ] && [ "$(cat "$target/.lmm-managed")" = "$version|$SCRIPT_VERSION" ]; then CLIENT="$target/bin/$entry"; log "Client $version already installed."; return; fi
   [ "$BOOTSTRAP" = 1 ] || fail 'Managed client is missing; rerun without --no-bootstrap.'
   mkdir -p "$work"
-  case "$TARGET" in
-    pi) allow='esbuild,@google/genai,protobufjs';;
-    dsh) allow='@deepseek-ai/dsh-subprocess-local,koffi,node-pty,@google/genai,protobufjs';;
-  esac
   INSTALL_ARGS=(install --global --prefix "$work" --no-audit --no-fund "$package@$version")
-  if npm install --help 2>/dev/null | grep -q -- '--allow-scripts'; then INSTALL_ARGS+=("--allow-scripts=$allow"); fi
-  [ "$(npm config get ignore-scripts 2>/dev/null || true)" != true ] || fail 'Your npm configuration disables required native build scripts. Configure a package-specific build policy before installing this client.'
+  if [ "$TARGET" = pi ]; then
+    # https://pi.dev/docs/latest/quickstart: Pi ships a prebuilt CLI.
+    INSTALL_ARGS+=(--ignore-scripts)
+  else
+    allow='@deepseek-ai/dsh-subprocess-local,koffi,node-pty,@google/genai,protobufjs'
+    if npm install --help 2>/dev/null | grep -q -- '--allow-scripts'; then INSTALL_ARGS+=("--allow-scripts=$allow"); fi
+    [ "$(npm config get ignore-scripts 2>/dev/null || true)" != true ] || fail 'DSH needs native build scripts. Review your package-specific build policy; this installer will not override ignore-scripts=true.'
+  fi
   with_registry_retry npm "${INSTALL_ARGS[@]}"
   "$work/bin/$entry" --version >/dev/null
   printf '%s\n' "$version|$SCRIPT_VERSION" > "$work/.lmm-managed"
@@ -348,6 +352,9 @@ install_lmm() {
     cargo install lmm-cli --version "$LMM_VERSION" --locked --root "$STAGE/cargo" </dev/null
     cp -- "$STAGE/cargo/bin/lmm" "$STAGE/lmm/lmm"
   else
+    if [ -n "${TERMUX_VERSION:-}" ] || [[ ${PREFIX:-} == */com.termux/files/usr ]]; then
+      fail 'No Android LMM CLI binary is provided. The Linux archive is not compatible with Termux.'
+    fi
     hash=$(lmm_hash "$PLATFORM")
     [ -n "$hash" ] || fail "No prebuilt CLI for $PLATFORM yet. With Rust 1.88+ and build tools, use --from-source."
     archive="$CACHE/lmm-v$LMM_VERSION-$PLATFORM.tar.gz"

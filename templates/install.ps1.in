@@ -26,9 +26,7 @@ LMM $Target installer $ScriptVersion
 Usage: .\$Target.ps1 [-Check] [-Update] [-Root PATH] [-Network auto|official|china]
                     [-Profile web|headless] [-AddPath] [-NoPath] [-NoInstallNode]
                     [-FromSource] [-Launch] [-Help]
-Per-user installation; no administrator, login or paid model call is required.
-Downloads are cached, resumed, retried and SHA-256 checked. Existing system Node,
-npm proxy/registry configuration and credentials are preserved.
+No automatic login or PATH changes. Pi on Windows requires Bash.
 -FromSource is for the LMM CLI and requires existing Rust 1.88+ and build tools.
 "@
 }
@@ -79,7 +77,16 @@ function Invoke-Bounded([string]$Executable,[string[]]$Arguments) {
 function Invoke-Native([string]$Command, [string[]]$Arguments) {
   if ([IO.Path]::GetExtension($Command) -ieq '.cmd') {
     if ((Test-Path -LiteralPath $Command) -and (Select-String -LiteralPath $Command -SimpleMatch 'Managed by LMM installers' -Quiet)) {
-      $line=@(Get-Content -LiteralPath $Command)[-1]
+      $launcherLines=@(Get-Content -LiteralPath $Command)
+      foreach ($pathLine in $launcherLines) {
+        if ($pathLine -match '^set "PATH=%~dp0\.\.\\(.+);%PATH%"$') {
+          $runtime=[IO.Path]::GetFullPath((Join-Path (Split-Path (Split-Path $Command)) $Matches[1]))
+          if (!$runtime.StartsWith($Root + '\',[StringComparison]::OrdinalIgnoreCase)) { throw 'Managed runtime escaped its root.' }
+          if (!(Test-Path -LiteralPath $runtime -PathType Container)) { throw 'Managed runtime is missing. Rerun the installer.' }
+          $env:PATH="$runtime;$env:PATH"
+        }
+      }
+      $line=$launcherLines[-1]
       if ($line -match '^"%~dp0\.\.\\(.+)" %\*$') {
         $resolved=[IO.Path]::GetFullPath((Join-Path (Split-Path (Split-Path $Command)) $Matches[1]))
         if (!$resolved.StartsWith($Root + '\',[StringComparison]::OrdinalIgnoreCase)) { throw 'Managed launcher target escaped its root.' }
@@ -88,13 +95,25 @@ function Invoke-Native([string]$Command, [string[]]$Arguments) {
     }
     if ([IO.Path]::GetExtension($Command) -ieq '.cmd') {
     $parent=Split-Path $Command
-    switch ([IO.Path]::GetFileName($Command).ToLowerInvariant()) {
-      'npm.cmd' { $entry=Join-Path $parent 'node_modules\npm\bin\npm-cli.js' }
-      'pi.cmd' { $entry=Join-Path $parent 'node_modules\@earendil-works\pi-coding-agent\dist\bundle\cli.js' }
-      'pnpm.cmd' { $entry=Join-Path $parent 'node_modules\pnpm\bin\pnpm.cjs' }
-      'dsh.cmd' { $entry=Join-Path $parent 'node_modules\@deepseek-ai\dsh\lib\bin.js' }
+    $binName=[IO.Path]::GetFileNameWithoutExtension($Command).ToLowerInvariant()
+    switch ($binName) {
+      'npm' { $packageName='npm' }
+      'pi' { $packageName='@earendil-works/pi-coding-agent' }
+      'pnpm' { $packageName='pnpm' }
+      'dsh' { $packageName='@deepseek-ai/dsh' }
       default { throw 'Unsupported command shim; use the managed installer or a native executable.' }
     }
+    $packageRoot=[IO.Path]::GetFullPath((Join-Path $parent ('node_modules/' + $packageName)))
+    $manifest=Get-Content -LiteralPath (Join-Path $packageRoot 'package.json') -Raw | ConvertFrom-Json
+    $binProperty=$manifest.PSObject.Properties['bin']
+    if (!$binProperty) { throw 'Package manifest has no bin entry.' }
+    $bins=$binProperty.Value
+    $relative=$null
+    if ($bins -is [string]) { $relative=$bins }
+    elseif ($null -ne $bins -and $bins.PSObject.Properties[$binName]) { $relative=$bins.PSObject.Properties[$binName].Value }
+    if ($relative -isnot [string] -or !$relative -or [IO.Path]::IsPathRooted($relative)) { throw 'Invalid package bin entry.' }
+    $entry=[IO.Path]::GetFullPath((Join-Path $packageRoot $relative))
+    if (!$entry.StartsWith($packageRoot + [IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase)) { throw 'Package bin entry escaped its package.' }
     if (!(Test-Path -LiteralPath $entry)) { throw 'Client entry is missing. Rerun with -Update.' }
     $Command=(Get-Command node.exe).Source
     $Arguments=@($entry)+$Arguments
@@ -111,6 +130,27 @@ function Test-Node {
   if ($LASTEXITCODE -ne 0 -or $versionText -notmatch '^v([0-9]+)\.([0-9]+)\.[0-9]+') { return $false }
   $major=[int]$Matches[1];$minor=[int]$Matches[2]
   return (($major -eq 22 -and $minor -ge 19) -or $major -ge 24)
+}
+function Assert-PiShell {
+  # Follow Pi's shellPath -> Git Bash -> PATH lookup, without editing settings.
+  $agentDirectory=$env:PI_CODING_AGENT_DIR
+  if (!$agentDirectory) { $agentDirectory=Join-Path ([Environment]::GetFolderPath('UserProfile')) '.pi\agent' }
+  $settingsPath=Join-Path $agentDirectory 'settings.json'
+  if (Test-Path -LiteralPath $settingsPath) {
+    try { $settings=Get-Content -LiteralPath $settingsPath -Raw | ConvertFrom-Json }
+    catch { throw "Invalid Pi settings: $settingsPath. Repair the JSON before installing." }
+    if ($null -eq $settings) { throw "Invalid Pi settings: $settingsPath" }
+    $property=$settings.PSObject.Properties['shellPath']
+    if ($property -and $property.Value) {
+      $shell=[string]$property.Value
+      if (Test-Path -LiteralPath $shell -PathType Leaf) { return }
+      if (Get-Command $shell -CommandType Application -ErrorAction SilentlyContinue) { return }
+      throw "Pi shellPath does not exist: $shell. Correct it in $settingsPath."
+    }
+  }
+  if ($env:ProgramFiles -and (Test-Path -LiteralPath (Join-Path $env:ProgramFiles 'Git\bin\bash.exe') -PathType Leaf)) { return }
+  if (Get-Command 'bash.exe' -CommandType Application -ErrorAction SilentlyContinue) { return }
+  throw 'Pi requires Bash on Windows. Install Git for Windows, reopen PowerShell, or set shellPath in Pi settings. See https://pi.dev/docs/latest/windows'
 }
 function Set-RequestProxy($request) {
             $proxyValue = if ($env:HTTPS_PROXY) { $env:HTTPS_PROXY } else { $env:HTTP_PROXY }
@@ -284,12 +324,16 @@ function Install-Client([string]$Package,[string]$Version,[string]$Entry) {
   if (-not $Update -and (Test-Path -LiteralPath (Join-Path $destination "$Entry.cmd")) -and (Test-Path -LiteralPath (Join-Path $destination '.lmm-managed')) -and (Get-Content -LiteralPath (Join-Path $destination '.lmm-managed') -Raw).Trim() -eq "$Version|$ScriptVersion") { $script:Client=Join-Path $destination "$Entry.cmd"; return }
   if ($NoBootstrap) { throw 'Managed client is missing. Rerun without -NoBootstrap.' }
   $work=Join-Path $script:Stage 'client'; New-Item -ItemType Directory -Path $work | Out-Null
-  $allow='esbuild,@google/genai,protobufjs'
-  if ($Target -eq 'dsh') { $allow='@deepseek-ai/dsh-subprocess-local,koffi,node-pty,@google/genai,protobufjs' }
   $installArgs=@('install','--global','--prefix',$work,'--no-audit','--no-fund',"$Package@$Version")
-  $npmHelp=(& npm.cmd install --help 2>$null | Out-String)
-  if ($npmHelp.Contains('--allow-scripts')) { $installArgs+=@("--allow-scripts=$allow") }
-  if ((& npm.cmd config get ignore-scripts 2>$null | Out-String).Trim() -eq 'true') { throw 'Your npm configuration blocks required native builds. Configure a package-specific build policy first.' }
+  if ($Target -eq 'pi') {
+    # https://pi.dev/docs/latest/quickstart: Pi ships a prebuilt CLI.
+    $installArgs+=@('--ignore-scripts')
+  } else {
+    $allow='@deepseek-ai/dsh-subprocess-local,koffi,node-pty,@google/genai,protobufjs'
+    $npmHelp=(& npm.cmd install --help 2>$null | Out-String)
+    if ($npmHelp.Contains('--allow-scripts')) { $installArgs+=@("--allow-scripts=$allow") }
+    if ((& npm.cmd config get ignore-scripts 2>$null | Out-String).Trim() -eq 'true') { throw 'DSH needs native build scripts. Review your package-specific build policy; ignore-scripts=true will not be overridden.' }
+  }
   Invoke-WithRegistryRetry (Get-Command npm.cmd).Source $installArgs
   Invoke-Native (Join-Path $work "$Entry.cmd") @('--version')
   Set-Content -LiteralPath (Join-Path $work '.lmm-managed') -Value "$Version|$ScriptVersion"
@@ -380,6 +424,7 @@ function Invoke-LmmSetup {
   elseif ([Environment]::Is64BitOperatingSystem) { $script:Platform='win-x64' }
   else { throw 'These installers require 64-bit Windows.' }
   if ($FromSource -and $Target -ne 'lmm') { throw '-FromSource is only for LMM CLI.' }
+  if ($Target -eq 'pi') { Assert-PiShell }
   if ($Check) {
     Write-Log "Platform: $Platform; root: $Root"
     $entry=Join-Path $Root "bin\$Target.cmd"

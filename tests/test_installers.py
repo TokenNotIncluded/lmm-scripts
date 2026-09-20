@@ -25,7 +25,7 @@ elif name=='curl':
 elif name=='npm':
  if '--help' in a:print('--allow-scripts');sys.exit(0)
  if a[:2]==['config','get']:
-  print('https://registry.npmjs.org/' if a[-1]=='registry' else os.environ['LMM_TEST_CACHE']);sys.exit(0)
+  print('https://registry.npmjs.org/' if a[-1]=='registry' else os.environ.get('npm_config_ignore_scripts','false') if a[-1]=='ignore-scripts' else os.environ['LMM_TEST_CACHE']);sys.exit(0)
  if os.environ.get('LMM_TEST_NPM_FAIL')=='1':sys.exit(9)
  if os.environ.get('LMM_TEST_NPM_SLEEP'):__import__('time').sleep(int(os.environ['LMM_TEST_NPM_SLEEP']))
  prefix=Path(a[a.index('--prefix')+1]);cmd='pi' if any('@earendil-works/pi-coding-agent@' in x for x in a) else ('pnpm' if any(x.startswith('pnpm@') for x in a) else 'dsh')
