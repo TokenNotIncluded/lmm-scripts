@@ -35,7 +35,7 @@ fetch_script() {
   expected=$(expected_hash "$name") || return 1
   if [ -f "$work/$name" ] && [ "$(hash_file "$work/$name")" = "$expected" ]; then return 0; fi
   printf '正在获取并校验安装程序（下载慢时会重试）…\n'
-  for url in "https://api.lmm.best/scripts/$name" "https://raw.githubusercontent.com/TokenNotIncluded/lmm-scripts/bb38629f825339f64c4b5b0018c3dde47787d9a2/$name"; do
+  for url in "https://api.lmm.best/scripts/$name" "https://raw.githubusercontent.com/TokenNotIncluded/lmm-scripts/95c162c2031ecba34942b2a91631c1ec1f6f3d05/$name"; do
     if curl -q -fSL --proto '=https' --proto-redir '=https' --connect-timeout 10 --max-time 120 --speed-limit 1024 --speed-time 20 --retry 2 --retry-delay 2 "$url" -o "$work/download"; then
       if [ "$(hash_file "$work/download")" = "$expected" ]; then mv "$work/download" "$work/$name"; return 0; fi
       printf '文件版本或校验不匹配，尝试固定版本备用地址。\n' >&2
