@@ -6,10 +6,15 @@ import sys,os,json,shutil
 from pathlib import Path
 name=Path(sys.argv[0]).name;a=sys.argv[1:]
 with open(os.environ['LMM_TEST_LOG'],'a') as f:f.write(json.dumps([name,a])+'\n')
-if name=='uname':print('Linux' if '-s' in a else 'x86_64')
+if name=='uname':print(os.environ.get('LMM_TEST_OS','Linux') if '-s' in a else os.environ.get('LMM_TEST_ARCH','x86_64'))
+elif name=='realpath':print(os.path.realpath(a[-1]))
 elif name=='node':
  if a and a[0]=='-':os.execv(os.environ['LMM_TEST_REAL_NODE'],[os.environ['LMM_TEST_REAL_NODE']]+a)
- if '-e' in a:sys.exit(0 if os.environ.get('LMM_TEST_NODE_OK','1')=='1' else 1)
+ if '-e' in a:
+  ok=os.environ.get('LMM_TEST_NODE_OK','1')=='1'
+  if a[-1]=='android':ok=ok and os.environ.get('LMM_TEST_NODE_PLATFORM','android')=='android'
+  sys.exit(0 if ok else 1)
+ if a and Path(a[0]).is_file():os.execv('/bin/bash',['bash',a[0]]+a[1:])
  print('v24.21.0')
 elif name=='curl':
  if '-ILs' in a:
@@ -25,7 +30,7 @@ elif name=='curl':
 elif name=='npm':
  if '--help' in a:print('--allow-scripts');sys.exit(0)
  if a[:2]==['config','get']:
-  print('https://registry.npmjs.org/' if a[-1]=='registry' else os.environ['LMM_TEST_CACHE']);sys.exit(0)
+  print('https://registry.npmjs.org/' if a[-1]=='registry' else os.environ.get('npm_config_ignore_scripts','false') if a[-1]=='ignore-scripts' else os.environ['LMM_TEST_CACHE']);sys.exit(0)
  if os.environ.get('LMM_TEST_NPM_FAIL')=='1':sys.exit(9)
  if os.environ.get('LMM_TEST_NPM_SLEEP'):__import__('time').sleep(int(os.environ['LMM_TEST_NPM_SLEEP']))
  prefix=Path(a[a.index('--prefix')+1]);cmd='pi' if any('@earendil-works/pi-coding-agent@' in x for x in a) else ('pnpm' if any(x.startswith('pnpm@') for x in a) else 'dsh')
@@ -37,12 +42,13 @@ else:sys.exit(4)
 class InstallerTests(unittest.TestCase):
  def setUp(self):
   self.tmp=tempfile.TemporaryDirectory();self.base=Path(self.tmp.name);self.root=self.base/"install space's path";self.bin=self.base/'fake';self.bin.mkdir();self.log=self.base/'calls.jsonl';self.log.write_text('')
-  for name in ['curl','uname','node','npm']:
+  for name in ['curl','uname','node','npm','realpath']:
    f=self.bin/name;f.write_text(FAKE);f.chmod(0o755)
   self.archive=self.base/'fixture.tar.gz'
   with tarfile.open(self.archive,'w:gz') as t:
    data=b'#!/usr/bin/env bash\necho "lmm 0.1.0"\n';x=tarfile.TarInfo('lmm');x.size=len(data);x.mode=0o755;t.addfile(x,io.BytesIO(data))
   self.env=dict(os.environ,PATH=str(self.bin)+os.pathsep+os.environ['PATH'],LMM_TEST_REAL_NODE=shutil.which('node'),LMM_TEST_LOG=str(self.log),LMM_TEST_ARCHIVE=str(self.archive),LMM_TEST_CACHE=str(self.base/'npm-cache'))
+  self.env['LMM_LIB_DIR']=str(P/'templates/lib')
   for k in list(self.env):
    if k.lower().startswith('npm_config_'):self.env.pop(k)
  def tearDown(self):self.tmp.cleanup()

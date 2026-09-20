@@ -1,25 +1,101 @@
 #!/usr/bin/env python3
-"""Emit standalone hosted installers; the server imports only root scripts."""
-from pathlib import Path
-import argparse,json,shlex
-P=Path(__file__).resolve().parents[1]
-v=json.loads((P/'versions.json').read_text())
-parser=argparse.ArgumentParser();parser.add_argument('--check',action='store_true');args=parser.parse_args()
-keys={'script_version':'SCRIPT_VERSION','node_version':'NODE_VERSION','pi_version':'PI_VERSION','pi_provider_version':'PI_PROVIDER_VERSION','pnpm_version':'PNPM_VERSION','dsh_version':'DSH_VERSION','dsh_provider_url':'DSH_PROVIDER_URL','dsh_provider_sha256':'DSH_PROVIDER_SHA256','lmm_version':'LMM_VERSION','lmm_release_base':'LMM_RELEASE_BASE'}
-pkeys={'script_version':'ScriptVersion','node_version':'NodeVersion','pi_version':'PiVersion','pi_provider_version':'PiProviderVersion','pnpm_version':'PnpmVersion','dsh_version':'DshVersion','dsh_provider_url':'DshProviderUrl','dsh_provider_sha256':'DshProviderSha256','lmm_version':'LmmVersion','lmm_release_base':'LmmReleaseBase'}
-for target in ['pi','dsh','lmm']:
- sh=f'TARGET={shlex.quote(target)}\n'+''.join(f'{name}={shlex.quote(v[key])}\n' for key,name in keys.items())
- for name,key in [('node_hash','node_sha256'),('lmm_hash','lmm_sha256')]:
-  sh+=name+'() { case "$1" in\n'+''.join(f'  {platform}) printf \'%s\\n\' {shlex.quote(sha)};;\n' for platform,sha in v[key].items())+'  *) printf \'\\n\';;\nesac; }\n'
- ps=f"$Target = '{target}'\n"+''.join(f"${name} = '{v[key]}'\n" for key,name in pkeys.items())
- for name,key in [('NodeHashes','node_sha256'),('LmmHashes','lmm_sha256')]:
-  ps+=f'${name} = @{{\n'+''.join(f"  '{platform}' = '{sha}'\n" for platform,sha in v[key].items())+'}\n'
- for ext,constants in [('sh',sh),('ps1',ps)]:
-  body=(P/'templates'/f'install.{ext}.in').read_text().replace('@@CONSTANTS@@',constants)
-  if ext=='sh':
-   lines=body.splitlines(keepends=True);body=lines[0]+'lmm_install_main() {\n'+''.join(lines[1:])+'\n}\nif true; then\n  lmm_install_main "$@"\nfi\n'
-  if ext=='ps1':body.encode('ascii')
-  path=P/f'{target}.{ext}'
-  if args.check:
-   if not path.exists() or path.read_text()!=body:raise SystemExit(f'Generated file out of date: {path}')
-  else:path.write_text(body);path.chmod(0o755 if ext=='sh' else 0o644)
+"""Generate small installers that load common functions from a pinned revision."""
+import argparse
+import json
+import re
+import shlex
+from render import ROOT, emit, libraries, standalone, template
+from catalog import EXTERNAL, MANAGED
+
+# JSON field -> shell / PowerShell variable. Keep a single naming map.
+NAMES = {
+    'script_version': ('SCRIPT_VERSION', 'ScriptVersion'),
+    'library_revision': ('LIB_REVISION', 'LibRevision'),
+    'node_version': ('NODE_VERSION', 'NodeVersion'),
+    'pi_version': ('PI_VERSION', 'PiVersion'),
+    'pi_provider_version': ('PI_PROVIDER_VERSION', 'PiProviderVersion'),
+    'pnpm_version': ('PNPM_VERSION', 'PnpmVersion'),
+    'dsh_version': ('DSH_VERSION', 'DshVersion'),
+    'dsh_provider_url': ('DSH_PROVIDER_URL', 'DshProviderUrl'),
+    'dsh_provider_sha256': ('DSH_PROVIDER_SHA256', 'DshProviderSha256'),
+    'lmm_version': ('LMM_VERSION', 'LmmVersion'),
+    'lmm_release_base': ('LMM_RELEASE_BASE', 'LmmReleaseBase'),
+}
+
+
+def constants(versions: dict, target: str, ext: str, body: str) -> str:
+    shell = ext == 'sh'
+    quote = shlex.quote if shell else lambda value: "'" + value.replace("'", "''") + "'"
+    result = f'TARGET={quote(target)}\n' if shell else f'$Target = {quote(target)}\n'
+    for key, names in NAMES.items():
+        name = names[0 if shell else 1]
+        if not re.search(r'\$(?:\{)?' + name + r'\b', body, re.I if not shell else 0):
+            continue
+        value = versions[key]
+        if not isinstance(value, str) or '\n' in value or '\r' in value:
+            raise ValueError(f'Invalid version field: {key}')
+        result += f'{name}={quote(value)}\n' if shell else f'${name} = {quote(value)}\n'
+    for key, shname, psname in [('node_sha256', 'node_hash', 'NodeHashes'), ('lmm_sha256', 'lmm_hash', 'LmmHashes')]:
+        if (shname if shell else '$' + psname) not in body:
+            continue
+        hashes = versions[key]
+        for platform, digest in hashes.items():
+            if not re.fullmatch(r'[a-z0-9-]+', platform) or not re.fullmatch(r'[0-9a-f]{64}', digest):
+                raise ValueError(f'Invalid {key} entry: {platform}')
+        if shell:
+            result += shname + '() { case "$1" in\n'
+            result += ''.join(f"  {platform}) printf '%s\\n' {quote(digest)};;\n" for platform, digest in hashes.items())
+            result += "  *) printf '\\n';;\nesac; }\n"
+        else:
+            result += f'${psname} = @{{\n'
+            result += ''.join(f'  {quote(platform)} = {quote(digest)}\n' for platform, digest in hashes.items()) + '}\n'
+    return result
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--check', action='store_true')
+    args = parser.parse_args()
+    versions = json.loads((ROOT / 'versions.json').read_text(encoding='utf-8'))
+    if not re.fullmatch(r'[0-9a-f]{40}', versions['library_revision']):
+        raise ValueError('library_revision must be a full Git commit ID')
+    for target in MANAGED:
+        for ext in ('sh', 'ps1'):
+            parts = ['lib/hash.sh', 'lib/termux.sh', 'lib/quote.sh'] if ext == 'sh' else ['lib/common.ps1']
+            parts.append(f'lib/download.{ext}')
+            parts.append(f'lib/lifecycle.{ext}')
+            if target != 'lmm':
+                parts.append(f'lib/node.{ext}')
+            parts.append(f'tools/{target}.{ext}')
+            shared = libraries(*parts[:-1])
+            names = [part.rsplit('/', 1)[1] for part in parts[:-1]]
+            loader = template(f'load.{ext}.in') + '\n' + libraries(parts[-1])
+            if ext == 'sh':
+                imports = 'for library in ' + ' '.join(names) + '; do\n  lmm_source_lib "$library" || exit $?\ndone'
+            else:
+                imports = "foreach ($library in @(" + ','.join("'" + name + "'" for name in names) + ")) {\n    . (Get-LmmLibrary $library)\n  }"
+            body = template(f'install.{ext}.in').replace('@@LIBRARIES@@', loader)
+            body = body.replace('@@LOAD_LIBRARIES@@', imports)
+            body = body.replace('@@NODE_CHECK@@', template('lib/node-check.sh') if target != 'lmm' and ext == 'sh' else '')
+            client = target != 'lmm'
+            body = body.replace('@@CLIENT_STATE@@', 'INSTALL_NODE=1 BOOTSTRAP=1 NPM_SELECTED=0' if client else '')
+            body = body.replace('@@NO_BOOTSTRAP@@', 'INSTALL_NODE=0; BOOTSTRAP=0' if client else ':')
+            body = body.replace('@@NO_INSTALL_NODE@@', 'INSTALL_NODE=0' if client else ':')
+            body = body.replace('@@CONSTANTS@@', constants(versions, target, ext, body + '\n' + shared))
+            if ext == 'sh':
+                body = standalone(body, 'lmm_install_main').replace('lmm_install_main() {', '# State is consumed by fetched modules.\n# shellcheck disable=SC2034\nlmm_install_main() {', 1)
+            else:
+                body.encode('ascii')
+            emit(f'{target}.{ext}', body, args.check)
+    for target in EXTERNAL:
+        for ext in ('sh', 'ps1'):
+            text = template(f'external.{ext}.in').replace('@@TARGET@@', target)
+            text = text.replace('@@REVISION@@', versions['library_revision'])
+            text = text.replace('@@LOADER@@', template(f'load.{ext}.in'))
+            emit(f'{target}.{ext}', text, args.check)
+    use = template('use.sh.in').replace('@@LIBRARIES@@', libraries('lib/root.sh'))
+    emit('lmm-use.sh', standalone(use, 'lmm_use_main'), args.check)
+
+
+if __name__ == '__main__':
+    main()
