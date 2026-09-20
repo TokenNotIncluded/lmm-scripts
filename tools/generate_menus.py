@@ -12,7 +12,7 @@ for ext in ('sh','ps1'):
         payload=subprocess.check_output(['git','show',f'{revision}:{name}'],cwd=p)
         sha=hashlib.sha256(payload).hexdigest()
         lines.append(f"{name}) printf '%s' '{sha}';;" if ext=='sh' else f"  '{name}' = '{sha}'")
-    text=(p/f'templates/menu.{ext}.in').read_text().replace('@@REVISION@@',revision).replace('@@HASHES@@','\n'.join(lines))
+    text=(p/f'templates/menu.{ext}.in').read_text(encoding='utf-8').replace('@@REVISION@@',revision).replace('@@HASHES@@','\n'.join(lines))
     data=text.encode('utf-8-sig' if ext=='ps1' else 'utf-8')
     path=p/f'menu.{ext}'
     if args.check:
