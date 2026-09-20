@@ -1,0 +1,61 @@
+name: Prepare shared installers
+on:
+  push:
+    branches: [codex/official-installers-20260920]
+    paths: [tools/_termux_refactor.py, tools/_termux_tests.txt, .github/workflows/_refactor.yml]
+permissions:
+  contents: write
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: 24.21.0
+      - name: Refactor and validate
+        run: |
+          python3 tools/_termux_refactor.py
+          python3 tools/generate.py
+          python3 tools/generate_menus.py
+          python3 tools/generate.py --check
+          python3 tools/generate_menus.py --check
+          python3 tests/test_installers.py
+          python3 tests/test_official_policy.py
+          shellcheck *.sh
+          pwsh -NoProfile -File tests/test-powershell.ps1
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+          names=[f'{name}.{ext}' for ext in ('sh','ps1') for name in ('pi','dsh','lmm')]
+          before=after=0
+          for name in names:
+              old=len(subprocess.check_output(['git','show',f'eccdf9ada0ff823b1512d89f380430b115cff8dc:{name}']))
+              new=Path(name).stat().st_size
+              before+=old;after+=new
+              print(f'{name}: {old} -> {new} bytes')
+          print(f'TOTAL: {before} -> {after} bytes; reduction {(1-after/before)*100:.1f}%')
+          assert after < before
+          PY
+          rm tools/_termux_refactor.py tools/_termux_tests.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'refactor: share installer helpers and handle native Termux paths and launchers'
+          python3 - <<'PY'
+          from pathlib import Path
+          import re, subprocess
+          p=Path('tools/generate_menus.py')
+          sha=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+          text,count=re.subn(r"revision='[0-9a-f]{40}'",f"revision='{sha}'",p.read_text(encoding='utf-8'))
+          assert count==1
+          p.write_text(text,encoding='utf-8')
+          PY
+          python3 tools/generate_menus.py
+          python3 tools/generate_menus.py --check
+          git add tools/generate_menus.py menu.sh menu.ps1
+          git commit -m 'fix: pin menus to shared Termux-aware installers'
+          git push origin HEAD:codex/official-installers-20260920
