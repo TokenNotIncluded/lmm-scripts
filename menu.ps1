@@ -1,113 +1,25 @@
-﻿# PowerShell 5.1+. Generated with UTF-8 BOM.
-[CmdletBinding()]
-param([switch]$Help,[switch]$List)
-$ErrorActionPreference='Stop'
-$tools=@(
-  @{Name='pi';Label='Pi + LMM';Kind='managed'},
-  @{Name='dsh';Label='DSH + LMM';Kind='managed'},
-  @{Name='lmm';Label='LMM CLI (preview)';Kind='managed'},
-  @{Name='codex';Label='Codex CLI';Kind='external'},
-  @{Name='claude-code';Label='Claude Code';Kind='external'},
-  @{Name='cc-switch';Label='CC Switch';Kind='desktop'},
-  @{Name='clash-verge-rev';Label='Clash Verge Rev';Kind='desktop'}
-)
-function Show-Tools { for ($i=0; $i -lt $tools.Count; $i++) { Write-Output "$($i+1)  $($tools[$i].Label)" } }
-if ($Help) { Write-Output 'LMM menu: .\menu.ps1 [-List]'; exit 0 }
-if ($List) { Show-Tools; exit 0 }
-$hashes=@{
-  'pi.ps1' = 'e18bdc5e94576fbfceac6757df1cb1a8825a1ba3620295e2aa4ff73149713fee'
-  'dsh.ps1' = '5bfa7571b4ccb7898339553f8e8e251b2d90d9cd84851b456c6244c1abb4cc53'
-  'lmm.ps1' = 'a96d8b558263af590de731969c7acce1983c0a980efa0f0e89fa1dfd5a8e37c9'
-  'codex.ps1' = '03256493ee33ac2a7f3d982f4e321c422f016b474951a719dc06245631ca614e'
-  'claude-code.ps1' = 'e4f838bb381955774082bc016cb454556ec54c1d71313625bac5494f5f61d11c'
-  'cc-switch.ps1' = '3d0f93be88a551a13606c60507dc6319697a955b29c67d36e073137e4f15f993'
-  'clash-verge-rev.ps1' = '5f9cc77d1be24825fa48a21ecd34da8084abaa75394b5630dd12ab9219d9ee07'
-  'lmm-use.ps1' = 'ac137e30b6609580cb6ee4fbb60ed77ed01ec6153b733140540d5bc38d9179c1'
-}
-$network='auto'; $root=$env:LMM_INSTALL_ROOT
-if (!$root) { $root=Join-Path $env:LOCALAPPDATA 'lmm-tools' }
-$work=Join-Path ([IO.Path]::GetTempPath()) ('lmm-menu-'+[Guid]::NewGuid().ToString('N'))
-$engine=(Get-Process -Id $PID).Path
-$oldProtocol=[Net.ServicePointManager]::SecurityProtocol
-function Ask([string]$Prompt) { $value=Read-Host $Prompt; if ($null -eq $value) { throw '需要交互终端。' }; return $value.Trim() }
-function Fetch-Script([string]$Name) {
-  if (!$hashes.ContainsKey($Name)) { throw 'Unknown script' }
-  $path=Join-Path $work $Name
-  if ((Test-Path -LiteralPath $path) -and (Get-FileHash -LiteralPath $path).Hash -eq $hashes[$Name]) { return $path }
-  foreach ($url in @("https://api.lmm.best/scripts/$Name","https://raw.githubusercontent.com/TokenNotIncluded/lmm-scripts/b715e644bb665d841f59e063e14b0fc81c6d72bc/$Name")) {
-    for ($attempt=1; $attempt -le 3; $attempt++) {
-      try {
-        Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $path -TimeoutSec 120
-        if ((Get-FileHash -LiteralPath $path).Hash -ne $hashes[$Name]) { throw '版本不匹配' }
-        return $path
-      } catch { if ($attempt -lt 3) { Start-Sleep -Seconds 1 } }
-    }
-  }
-  throw "下载失败或版本不匹配：$Name"
-}
-function Run-Script([string]$Name,[string[]]$Arguments) {
-  try {
-    $path=Fetch-Script $Name
-    & $engine -NoProfile -ExecutionPolicy Bypass -File $path @Arguments
-    if ($LASTEXITCODE -ne 0) { Write-Host "退出码 $LASTEXITCODE，请查看上方错误。" }
-  } catch { Write-Host $_.Exception.Message }
-}
-function Show-Help([string]$Name) {
-  switch ($Name) {
-    pi { Write-Host 'pi → /login → LMM → /model。' }
-    dsh { Write-Host 'dsh web → Settings → Models → LMM。' }
-    lmm { Write-Host 'LMM CLI 为预览版，setup 只生成计划。' }
-    codex { Write-Host '运行 codex，按官方提示登录；使用上游安装位置与更新策略。' }
-    claude-code { Write-Host '运行 claude，按官方提示登录；使用上游安装位置与更新策略。' }
-    default { Write-Host '桌面应用按系统安装，不自动配置账号、订阅或启用代理。' }
-  }
-}
+$ErrorActionPreference = 'Stop'
+if ($args.Count) { throw 'Usage: .\menu.ps1' }
+$tools = @('pi','dsh','lmm','codex','claude-code','cc-switch','clash-verge-rev')
+$work = Join-Path ([IO.Path]::GetTempPath()) ("lmm-menu-" + [guid]::NewGuid())
 try {
-  if ([Console]::IsInputRedirected) { throw '需要交互终端；自动化请直接执行工具脚本。' }
-  [Net.ServicePointManager]::SecurityProtocol=$oldProtocol -bor [Net.SecurityProtocolType]::Tls12
-  New-Item -ItemType Directory -Path $work | Out-Null
-  :main while ($true) {
-    Write-Host "`nLMM 工具"; Show-Tools; Write-Host "n 下载网络（$network）`n0 退出"
-    $choice=Ask '选择'
+  New-Item -ItemType Directory $work | Out-Null
+  while ($true) {
+    Write-Host "`nInstall / update"
+    for ($i=0; $i -lt $tools.Count; $i++) { Write-Host "$($i+1)  $($tools[$i])" }
+    $choice = Read-Host '0  Exit'
     if ($choice -eq '0') { break }
-    if ($choice -eq 'n') {
-      Write-Host '1 自动  2 官方  3 国内镜像'
-      switch (Ask '选择') { '1' { $network='auto' }; '2' { $network='official' }; '3' { $network='china' } }
-      continue
-    }
-    $index=0
-    if (![int]::TryParse($choice,[ref]$index) -or $index -lt 1 -or $index -gt $tools.Count) { Write-Host '无效选择。'; continue }
-    $item=$tools[$index-1]; $tool=$item.Name
-    :actions while ($true) {
-      Write-Host "`n$($item.Label)`n1 安装  2 更新  3 检查  4 启动  5 使用说明"
-      if ($item.Kind -ne 'managed') { Write-Host '6 预览安装方案' }
-      Write-Host '0 返回'
-      switch (Ask '选择') {
-        '0' { break actions }
-        '1' { Run-Script "$tool.ps1" @('-Network',$network) }
-        '2' { Run-Script "$tool.ps1" @('-Network',$network,'-Update') }
-        '3' { Run-Script "$tool.ps1" @('-Check') }
-        '5' { Show-Help $tool }
-        '6' { if ($item.Kind -ne 'managed') { Run-Script "$tool.ps1" @('-DryRun') } }
-        '4' {
-          if ($tool -eq 'lmm') {
-            Write-Host "1 目录  2 状态  3 诊断  4 安装计划`n5 登录  6 模型  7 退出登录  0 返回"
-            $actions=@{'1'='catalog';'2'='status';'3'='doctor';'4'='plan';'5'='login';'6'='models';'7'='logout'}
-            $action=Ask '选择'
-            if ($actions.ContainsKey($action)) { Run-Script 'lmm-use.ps1' @('-Command',$actions[$action]) }
-          } elseif ($item.Kind -ne 'managed') { Run-Script "$tool.ps1" @('-Network',$network,'-Launch') }
-          else {
-            $launcher=Join-Path $root "bin\$tool.cmd"
-            if (Test-Path -LiteralPath $launcher) { if ($tool -eq 'dsh') { & $launcher --profile web } else { & $launcher } }
-            else { Write-Host '请先安装。' }
-          }
-        }
-        default { Write-Host '无效选择。' }
+    if ($choice -notmatch '^[1-7]$') { continue }
+    $name = $tools[[int]$choice-1] + '.ps1'
+    try {
+      $path = Join-Path $work $name
+      if ($PSScriptRoot -and (Test-Path (Join-Path $PSScriptRoot $name))) {
+        $path = Join-Path $PSScriptRoot $name
+      } else {
+        Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/TokenNotIncluded/lmm-scripts/fde672e2e54dbbd09b4d9e76d13d0659c18cebbd/$name" -OutFile $path
       }
-    }
+      & (Get-Process -Id $PID).Path -NoProfile -ExecutionPolicy Bypass -File $path
+      if ($LASTEXITCODE) { Write-Warning "Installer exited with $LASTEXITCODE" }
+    } catch { Write-Warning $_ }
   }
-} catch { Write-Host $_.Exception.Message; exit 1 }
-finally {
-  [Net.ServicePointManager]::SecurityProtocol=$oldProtocol
-  if (Test-Path -LiteralPath $work) { Remove-Item -LiteralPath $work -Recurse -Force }
-}
+} finally { Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue }

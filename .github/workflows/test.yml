@@ -1,12 +1,12 @@
 name: Installer checks
-on:
-  push:
-  pull_request:
-  workflow_dispatch:
+on: [push, pull_request, workflow_dispatch]
 permissions:
   contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
-  checks:
+  platforms:
     strategy:
       fail-fast: false
       matrix:
@@ -15,91 +15,84 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
-        with:
-          fetch-depth: 0
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
         with:
           node-version: 24.21.0
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:
           python-version: '3.x'
-      - name: Menu syntax and entry checks
-        shell: pwsh
-        run: |
-          $errors=$null; $tokens=$null
-          [void][System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PWD "menu.ps1"),[ref]$tokens,[ref]$errors)
-          if ($errors.Count) { throw ($errors | Out-String) }
-          ./menu.ps1 -Help
-      - run: python tools/generate.py --check
-      - run: python tools/generate_menus.py --check
-      - name: Shell fault-injection tests
+      - name: Shell contracts
         if: runner.os != 'Windows'
-        run: |
-          python3 tests/test_installers.py
-          python3 tests/test_official_policy.py
-          python3 tests/test_library_loader.py
-          python3 tests/test_bounded.py
+        run: python3 test.py
       - name: ShellCheck
         if: runner.os == 'Linux'
         run: shellcheck *.sh
-      - name: PowerShell checks
+      - name: PowerShell contracts
         shell: pwsh
-        run: |
-          ./tests/test-powershell.ps1
-          ./tests/test-official-policy.ps1
-          ./tests/test-library-loader.ps1
-      - name: Windows PowerShell 5.1 checks
+        run: ./test.ps1
+      - name: PowerShell 5.1 contracts
         if: runner.os == 'Windows'
         shell: powershell
-        run: |
-          .\tests\test-powershell.ps1
-          .\tests\test-official-policy.ps1
-          .\tests\test-library-loader.ps1
-      - name: Install real Pi on Unix with lifecycle scripts disabled
+        run: .\test.ps1
+      - name: Real Unix CLI installs
         if: runner.os != 'Windows'
         shell: bash
         run: |
-          export PI_CODING_AGENT_DIR="$RUNNER_TEMP/pi-profile"
-          npm_config_ignore_scripts=true bash pi.sh --root "$RUNNER_TEMP/lmm clients" --no-path --network official
-          "$RUNNER_TEMP/lmm clients/bin/pi" --version
-          "$RUNNER_TEMP/lmm clients/bin/pi" list
-          bash pi.sh --root "$RUNNER_TEMP/lmm clients" --check
-      - name: Install real CLI on Unix
-        if: runner.os != 'Windows'
-        shell: bash
-        run: |
-          bash lmm.sh --root "$RUNNER_TEMP/lmm tools" --no-path --network official
-          "$RUNNER_TEMP/lmm tools/bin/lmm" --version
-          "$RUNNER_TEMP/lmm tools/bin/lmm" catalog pi --json
-          bash lmm.sh --root "$RUNNER_TEMP/lmm tools" --no-path --network official
-      - name: Install real CLI on Windows
-        if: runner.os == 'Windows'
-        shell: powershell
-        run: |
-          .\lmm.ps1 -Root "$env:RUNNER_TEMP\lmm 测试 tools" -NoPath -Network official
-          if ($LASTEXITCODE -ne 0) { throw 'Installer or executable check failed' }
-          & "$env:RUNNER_TEMP\lmm 测试 tools\bin\lmm.cmd" --version
-          if ($LASTEXITCODE -ne 0) { throw 'CLI version failed' }
-          & "$env:RUNNER_TEMP\lmm 测试 tools\bin\lmm.cmd" catalog pi --json
-          if ($LASTEXITCODE -ne 0) { throw 'CLI catalog failed' }
-          .\lmm.ps1 -Root "$env:RUNNER_TEMP\lmm 测试 tools" -NoPath -Network official
-          if ($LASTEXITCODE -ne 0) { throw 'Installer or executable check failed' }
-          .\lmm.ps1 -Root "$env:RUNNER_TEMP\lmm 测试 tools" -Check
-          if ($LASTEXITCODE -ne 0) { throw 'Installer or executable check failed' }
-      - name: Install real Pi and DSH on Windows
+          export PI_CODING_AGENT_DIR="$RUNNER_TEMP/pi-profile" DSH_HOME="$RUNNER_TEMP/dsh-profile"
+          export CODEX_HOME="$RUNNER_TEMP/codex-profile" CODEX_INSTALL_DIR="$RUNNER_TEMP/codex-bin"
+          export CODEX_NON_INTERACTIVE=true
+          bash pi.sh
+          pi --version
+          pi list
+          bash dsh.sh
+          dsh --version
+          dsh plugin --profile web list --depth 0
+          bash codex.sh
+          "$CODEX_INSTALL_DIR/codex" --version
+          bash claude-code.sh stable
+          "$HOME/.local/bin/claude" --version
+          bash lmm.sh
+          "$HOME/.local/bin/lmm" --version
+      - name: Real Windows CLI installs
         if: runner.os == 'Windows'
         shell: powershell
         run: |
           $env:PI_CODING_AGENT_DIR="$env:RUNNER_TEMP\pi-profile"
-          $env:DSH_HOME="$env:RUNNER_TEMP\dsh profile 测试"
-          $beforePath=$env:PATH
-          $beforeRegistry=$env:npm_config_registry
-          .\pi.ps1 -Root "$env:RUNNER_TEMP\lmm clients" -NoPath -Network official -InstallOnly
-          if ($LASTEXITCODE -ne 0) { throw 'Installer or executable check failed' }
-          .\dsh.ps1 -Root "$env:RUNNER_TEMP\lmm clients" -NoPath -Network official -InstallOnly
-          if ($LASTEXITCODE -ne 0) { throw 'Installer or executable check failed' }
-          .\pi.ps1 -Root "$env:RUNNER_TEMP\lmm clients" -Check
-          if ($LASTEXITCODE -ne 0) { throw 'Installer or executable check failed' }
-          .\dsh.ps1 -Root "$env:RUNNER_TEMP\lmm clients" -Check
-          if ($LASTEXITCODE -ne 0) { throw 'Installer or executable check failed' }
-          if ($env:PATH -ne $beforePath -or $env:npm_config_registry -ne $beforeRegistry) { throw 'Installer leaked process environment changes' }
+          $env:DSH_HOME="$env:RUNNER_TEMP\dsh-profile"
+          $env:CODEX_HOME="$env:RUNNER_TEMP\codex-profile"
+          $env:CODEX_INSTALL_DIR="$env:RUNNER_TEMP\codex-bin"
+          $env:CODEX_NON_INTERACTIVE='true'
+          foreach ($tool in @('pi','dsh','codex','claude-code','lmm')) {
+            & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\$tool.ps1"
+            if ($LASTEXITCODE) { throw "$tool install failed: $LASTEXITCODE" }
+          }
+          foreach ($command in @('pi.cmd','dsh.cmd',"$env:CODEX_INSTALL_DIR\codex.exe","$HOME\.local\bin\claude.exe","$HOME\.local\bin\lmm.exe")) {
+            & $command --version
+            if ($LASTEXITCODE) { throw "$command failed: $LASTEXITCODE" }
+          }
+  linux-libc:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [debian:12, alpine:3.22]
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      - name: Official installers without Node
+        env:
+          IMAGE: ${{ matrix.image }}
+        run: |
+          docker run --rm -v "$PWD:/src:ro" "$IMAGE" sh -ec '
+            if command -v apk >/dev/null; then
+              apk add --no-cache bash curl ca-certificates libgcc libstdc++ ripgrep
+              export USE_BUILTIN_RIPGREP=0
+            else
+              apt-get update && apt-get install -y bash curl ca-certificates
+            fi
+            export CODEX_NON_INTERACTIVE=true
+            bash /src/codex.sh
+            /root/.local/bin/codex --version
+            bash /src/claude-code.sh stable
+            /root/.local/bin/claude --version
+          '

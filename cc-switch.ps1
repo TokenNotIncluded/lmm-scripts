@@ -1,51 +1,16 @@
-[CmdletBinding(PositionalBinding=$false)]
-param([string]$Root='', [string]$Version='',
-  [ValidateSet('auto','official','china')][string]$Network='official',
-  [switch]$Check,[switch]$Update,[switch]$Launch,[switch]$DryRun,[switch]$Help,
-  [Parameter(ValueFromRemainingArguments=$true)][string[]]$RunArgs=@())
-$ErrorActionPreference='Stop'
-$Target='cc-switch'
-$LibRevision='7a42eebbdf13cb350f25aca8c466b1ec8964df15'
-if ($Help) {
-  Write-Output "Install $Target. Options: -Check -Update -Launch -DryRun -Root PATH -Version VERSION -Network official. Uses upstream locations and update policies. LMM_LIB_DIR selects local helpers."
-  exit 0
+$ErrorActionPreference = 'Stop'
+if ($args.Count) { throw 'Usage: .\cc-switch.ps1' }
+$arch = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }
+switch ($arch) {
+  'AMD64' { $pattern = '-Windows\.msi$' }
+  'ARM64' { $pattern = '-Windows-arm64\.msi$' }
+  default { throw 'CC Switch requires x64 or arm64 Windows.' }
 }
-function Get-LmmLibrary([string]$Name) {
-  if ($env:LMM_LIB_DIR) {
-    $text=[IO.File]::ReadAllText((Join-Path $env:LMM_LIB_DIR $Name),[Text.Encoding]::UTF8)
-  } else {
-    $uri="https://raw.githubusercontent.com/TokenNotIncluded/lmm-scripts/$LibRevision/templates/lib/$Name"
-    $text=$null
-    $protocol=[Net.ServicePointManager]::SecurityProtocol
-    try {
-      [Net.ServicePointManager]::SecurityProtocol=$protocol -bor [Net.SecurityProtocolType]::Tls12
-      $options=@{Uri=$uri;UseBasicParsing=$true;TimeoutSec=60;ErrorAction='Stop'}
-      $proxyValue=if($env:HTTPS_PROXY){$env:HTTPS_PROXY}else{$env:HTTP_PROXY}
-      if ($proxyValue) {
-        $proxy=[Uri]$proxyValue
-        $options.Proxy=$proxy.GetLeftPart([UriPartial]::Authority)
-        if ($proxy.UserInfo) {
-          $parts=$proxy.UserInfo.Split(':',2)
-          $password=if($parts.Length -eq 2){[Uri]::UnescapeDataString($parts[1])}else{''}
-          $secure=ConvertTo-SecureString $password -AsPlainText -Force
-          $options.ProxyCredential=New-Object System.Management.Automation.PSCredential([Uri]::UnescapeDataString($parts[0]),$secure)
-        }
-      }
-      for ($attempt=1;$attempt -le 3;$attempt++) {
-        try {
-          $response=Invoke-WebRequest @options
-          $text=[Text.Encoding]::UTF8.GetString($response.RawContentStream.ToArray())
-          break
-        } catch { if ($attempt -eq 3) { throw "Cannot fetch library $Name at $LibRevision. Check the network or set LMM_LIB_DIR." } }
-      }
-    } finally { [Net.ServicePointManager]::SecurityProtocol=$protocol }
-  }
-  if ([string]::IsNullOrWhiteSpace($text)) { throw "Empty library: $Name" }
-  return [scriptblock]::Create($text)
-}
-
+$assets = @((Invoke-RestMethod https://api.github.com/repos/farion1231/cc-switch/releases/latest).assets | Where-Object name -Match $pattern)
+if ($assets.Count -ne 1) { throw 'No unique official Windows installer.' }
+$file = Join-Path ([IO.Path]::GetTempPath()) ("cc-switch-" + [guid]::NewGuid() + '.msi')
 try {
-  . (Get-LmmLibrary 'external.ps1')
-  Invoke-ExternalSetup -Target $Target -Root $Root -Version $Version -Network $Network -Check:$Check -Update:$Update -Launch:$Launch -DryRun:$DryRun -RunArgs $RunArgs
-  exit 0
-} catch { Write-Error $_ -ErrorAction Continue; exit 1 }
+  Invoke-WebRequest -UseBasicParsing $assets[0].browser_download_url -OutFile $file
+  $process = Start-Process msiexec.exe -ArgumentList @('/i', "`"$file`"") -Wait -PassThru
+  if ($process.ExitCode -notin 0,3010) { throw "Installer exited with $($process.ExitCode)" }
+} finally { Remove-Item -LiteralPath $file -Force -ErrorAction SilentlyContinue }
