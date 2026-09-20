@@ -38,6 +38,7 @@ jobs:
           python3 tests/test_installers.py
           python3 tests/test_official_policy.py
           python3 tests/test_library_loader.py
+          python3 tests/test_bounded.py
       - name: ShellCheck
         if: runner.os == 'Linux'
         run: shellcheck *.sh

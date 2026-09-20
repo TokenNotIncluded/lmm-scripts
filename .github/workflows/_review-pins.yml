@@ -1,0 +1,46 @@
+name: Pin reviewed process cleanup
+on:
+  push:
+    branches: [codex/official-installers-20260920]
+    paths: [.github/workflows/_review-pins.yml]
+permissions:
+  contents: write
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          fetch-depth: 0
+      - name: Generate pinned installers and menus
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          python3 - <<'PY'
+          import json, subprocess
+          from pathlib import Path
+          path = Path('versions.json')
+          versions = json.loads(path.read_text(encoding='utf-8'))
+          versions['library_revision'] = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          versions['script_version'] = '2026.09.21.1'
+          path.write_text(json.dumps(versions, indent=2) + '\n', encoding='utf-8')
+          PY
+          python3 tools/generate.py
+          python3 tools/generate.py --check
+          git add versions.json '*.sh' '*.ps1'
+          git commit -m 'fix: pin installers to reviewed process-group cleanup'
+          python3 - <<'PY'
+          import re, subprocess
+          from pathlib import Path
+          path = Path('tools/generate_menus.py')
+          revision = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          text, count = re.subn(r"revision='[0-9a-f]{40}'", f"revision='{revision}'", path.read_text(encoding='utf-8'))
+          assert count == 1
+          path.write_text(text, encoding='utf-8')
+          PY
+          python3 tools/generate_menus.py
+          python3 tools/generate_menus.py --check
+          git add tools/generate_menus.py menu.sh menu.ps1
+          git commit -m 'fix: point menus at process-cleanup regression fix'
+          git push origin HEAD:codex/official-installers-20260920

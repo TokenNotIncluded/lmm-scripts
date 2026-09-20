@@ -51,20 +51,57 @@ configure_npm() {
 }
 bounded() {
   node - "$COMMAND_TIMEOUT" "$@" <<'JS'
-const {spawn}=require('node:child_process');
-const [seconds,command,...args]=process.argv.slice(2);
-const child=spawn(command,args,{stdio:'inherit',detached:true});
-let timedOut=false,stopping=false;
-function stop(code){if(stopping)return;stopping=true;timedOut=code===124;try{process.kill(-child.pid,'SIGTERM')}catch{};const hard=setTimeout(()=>{try{process.kill(-child.pid,'SIGKILL')}catch{}},3000);hard.unref()}
-const start=Date.now();const heartbeat=setInterval(()=>process.stderr.write(`[install] Still working: ${Math.floor((Date.now()-start)/1000)}s elapsed.\n`),15000);
-const timeout=setTimeout(()=>{process.stderr.write('[install] Operation timed out; increase LMM_COMMAND_TIMEOUT for a slow connection.\n');stop(124)},Number(seconds)*1000);
-process.on('SIGINT',()=>stop(130));process.on('SIGTERM',()=>stop(143));
-child.on('error',e=>{clearInterval(heartbeat);clearTimeout(timeout);process.stderr.write(`[install] Cannot start ${command}: ${e.code}\n`);process.exitCode=1});
-child.on('exit',(code,signal)=>{clearInterval(heartbeat);clearTimeout(timeout);process.exitCode=timedOut?124:signal?130:code??1});
+const {spawn} = require('node:child_process');
+const {signals} = require('node:os').constants;
+const [seconds, command, ...args] = process.argv.slice(2);
+const child = spawn(command, args, {stdio: 'inherit', detached: true});
+let stopCode;
+const start = Date.now();
+const heartbeat = setInterval(() => {
+  process.stderr.write(`[install] Still working: ${Math.floor((Date.now() - start) / 1000)}s elapsed.\n`);
+}, 15000);
+const timeout = setTimeout(() => {
+  process.stderr.write('[install] Operation timed out; increase LMM_COMMAND_TIMEOUT for a slow connection.\n');
+  stop(124);
+}, Number(seconds) * 1000);
+function clearTimers() {
+  clearInterval(heartbeat);
+  clearTimeout(timeout);
+}
+function signalGroup(signal) {
+  if (!child.pid) return;
+  try { process.kill(-child.pid, signal); }
+  catch (error) {
+    if (error.code !== 'ESRCH') process.stderr.write(`[install] Cannot send ${signal}: ${error.code}\n`);
+  }
+}
+function stop(code) {
+  if (stopCode !== undefined) return;
+  stopCode = code;
+  process.exitCode = code;
+  clearTimers();
+  signalGroup('SIGTERM');
+  // Keep this timer referenced: the leader can exit while descendants survive.
+  if (child.pid) setTimeout(() => signalGroup('SIGKILL'), 3000);
+}
+process.on('SIGINT', () => stop(130));
+process.on('SIGTERM', () => stop(143));
+child.on('error', error => {
+  clearTimers();
+  process.stderr.write(`[install] Cannot start ${command}: ${error.code}\n`);
+  process.exitCode = stopCode ?? 1;
+});
+child.on('exit', (code, signal) => {
+  clearTimers();
+  process.exitCode = stopCode ?? code ?? (signal ? 128 + signals[signal] : 1);
+});
 JS
 }
 with_registry_retry() {
-  if bounded "$@"; then return; fi
+  local status=0
+  bounded "$@" || status=$?
+  # Cancellation is not a network failure. Preserve it without another install.
+  case "$status" in 0) return;; 130|143) return "$status";; esac
   if [ "$NETWORK" = auto ] && [ "$NPM_SELECTED" = 1 ]; then
     if [ "$npm_config_registry" = https://registry.npmjs.org/ ]; then export npm_config_registry=https://registry.npmmirror.com/; else export npm_config_registry=https://registry.npmjs.org/; fi
     log 'Retrying the alternate registry with the same package cache.'
