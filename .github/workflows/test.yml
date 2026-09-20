@@ -63,7 +63,8 @@ jobs:
           $env:CODEX_INSTALL_DIR="$env:RUNNER_TEMP\codex-bin"
           $env:CODEX_NON_INTERACTIVE='true'
           foreach ($tool in @('pi','dsh','codex','claude-code','lmm')) {
-            & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\$tool.ps1"
+            Write-Host "Installing $tool"
+            & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ".\$tool.ps1"
             if ($LASTEXITCODE) { throw "$tool install failed: $LASTEXITCODE" }
           }
           foreach ($command in @('pi.cmd','dsh.cmd',"$env:CODEX_INSTALL_DIR\codex.exe","$HOME\.local\bin\claude.exe","$HOME\.local\bin\lmm.exe")) {
