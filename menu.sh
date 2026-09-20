@@ -56,13 +56,13 @@ esac
 if ! { exec 3</dev/tty; } 2>/dev/null; then printf '需要交互终端；自动化请直接运行工具脚本。\n' >&2; exit 2; fi
 command -v curl >/dev/null 2>&1 || { printf '请先安装 curl。\n' >&2; exit 2; }
 expected_hash() { case "$1" in
-pi.sh) printf '%s' '03ce0f2ebbe1b160017244b76287d378b18592622b40bee229772ebe90d254f9';;
-dsh.sh) printf '%s' '45e6db16f0be8d468d99b2325d703a2fa21a1ee961a316f8056c4f3cab369130';;
-lmm.sh) printf '%s' 'a8578cb820369034a7c28fa7da87a9ba51795d5cec75d48aa056c8c380f02819';;
-codex.sh) printf '%s' '7e117367fd9c3a349e84aaab02d7398c9649f43d0dd03cb6133d562a8612b57d';;
-claude-code.sh) printf '%s' 'a4df55371e625bea9f222f1135b1fe6e30536e4c5a5947948af7072040b712c9';;
-cc-switch.sh) printf '%s' 'd97dc4cd1ec88ac48f283a717bb8caec58b42154772ac4e63a84da639a38ff77';;
-clash-verge-rev.sh) printf '%s' '26d2efc3add8beec179ba9efee4a62c0e7d79e03539eca4e7168cd4f1674f9ca';;
+pi.sh) printf '%s' 'da34fe287699808d1f1ebac0dbb4e16ddf91c7c32f351b89f6d9ba6fe9a57288';;
+dsh.sh) printf '%s' '9198b7b0cea47a2fe26717ec42466ff332539dec617740ef400c21a6fe4c4807';;
+lmm.sh) printf '%s' 'f8b5f76f16786c600fc1d0c67475d04527af4cdad2f246b205e5318e1ade6da9';;
+codex.sh) printf '%s' '624bef260481f86fa87b4f2cbd072db5aedd611a418e8b981aca82e73dc80ec7';;
+claude-code.sh) printf '%s' '616e5715fa11e029c1501d66058436f58cc79d92dd550018f46d6231a95ca555';;
+cc-switch.sh) printf '%s' '1e52aa4be0d47af1d3ddb89cf85a643d373910da3eeb11aecb0389a67f6d0d97';;
+clash-verge-rev.sh) printf '%s' '9f807a11bcf1271cf449889abf75a70389ef4cc0e6b1520cd9427cadf045a91b';;
 lmm-use.sh) printf '%s' '8f5cb27ef99bc3fd51a5b85e5aba0418f791e3cae03cd0ea624384b3dd50a06b';;
 *) return 1;;
 esac; }
@@ -76,7 +76,7 @@ fetch_script() {
   local name=$1 expected url
   expected=$(expected_hash "$name") || return 1
   if [ -f "$work/$name" ] && [ "$(sha256 "$work/$name")" = "$expected" ]; then return 0; fi
-  for url in "https://api.lmm.best/scripts/$name" "https://raw.githubusercontent.com/TokenNotIncluded/lmm-scripts/1d2fb99abe87d8af2cd3a17489cadd32cabcc189/$name"; do
+  for url in "https://api.lmm.best/scripts/$name" "https://raw.githubusercontent.com/TokenNotIncluded/lmm-scripts/b715e644bb665d841f59e063e14b0fc81c6d72bc/$name"; do
     if curl -q -fsSL --proto '=https' --proto-redir '=https' --connect-timeout 10 --max-time 120 --retry 2 "$url" -o "$work/download"; then
       if [ "$(sha256 "$work/download")" = "$expected" ]; then mv "$work/download" "$work/$name"; return 0; fi
     fi
