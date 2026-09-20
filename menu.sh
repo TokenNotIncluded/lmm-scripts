@@ -10,7 +10,8 @@ while true; do
   printf '0  Exit\n> '
   read -r choice </dev/tty || exit 1
   [[ $choice = 0 ]] && exit 0
-  [[ $choice =~ ^[1-7]$ ]] && ((choice <= ${#tools[@]})) || continue
+  [[ $choice =~ ^[1-7]$ ]] || continue
+  ((choice <= ${#tools[@]})) || continue
   tool=${tools[choice-1]}
   if [[ -n ${BASH_SOURCE[0]:-} && -f $dir/$tool.sh ]]; then
     bash "$dir/$tool.sh" </dev/tty || printf 'Installation failed.\n' >&2

@@ -8,7 +8,7 @@ $engine = (Get-Process -Id $PID).Path
 function Check([string]$File,[string]$Setup,[int]$Code,[string]$Pattern,[string]$Arguments='') {
   $ErrorActionPreference = 'Continue'
   $path=(Join-Path $PSScriptRoot $File).Replace("'","''")
-  $output = & $engine -NoProfile -NonInteractive -Command "$Setup`n& '$path' $Arguments" 2>&1 | Out-String
+  $output = & $engine -NoProfile -NonInteractive -Command "`$ErrorActionPreference='Stop'; `$LASTEXITCODE=0; $Setup`n& '$path' $Arguments; exit `$LASTEXITCODE" 2>&1 | Out-String
   if ($LASTEXITCODE -ne $Code -or $output -notmatch $Pattern) { throw "$File expected exit $Code / $Pattern, received $LASTEXITCODE : $output" }
 }
 $npmFailure = @'
