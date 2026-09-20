@@ -36,8 +36,8 @@ try {
   $config=Join-Path $env:PI_CODING_AGENT_DIR 'settings.json'
   @{shellPath=(Join-Path $testRoot 'missing.exe')} | ConvertTo-Json | Set-Content -LiteralPath $config
   Assert-Throws { Assert-PiShell } 'shellPath does not exist'
-  $custom=Join-Path $testRoot 'custom bash.exe'; Set-Content -LiteralPath $custom -Value ''
-  @{shellPath=$custom} | ConvertTo-Json | Set-Content -LiteralPath $config
+  $custom=Join-Path $testRoot ('custom '+[char]0x6D4B+[char]0x8BD5+' bash.exe'); Set-Content -LiteralPath $custom -Value ''
+  [IO.File]::WriteAllText($config,(@{shellPath=$custom} | ConvertTo-Json),[Text.UTF8Encoding]::new($false))
   $before=Get-Content -LiteralPath $config -Raw
   Assert-PiShell
   if ((Get-Content -LiteralPath $config -Raw) -ne $before) { throw 'Shell preflight modified settings.' }
