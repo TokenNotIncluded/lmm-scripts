@@ -4,7 +4,7 @@ from pathlib import Path
 import argparse, hashlib, subprocess
 p=Path(__file__).resolve().parents[1]
 a=argparse.ArgumentParser();a.add_argument('--check',action='store_true');args=a.parse_args()
-revision='5b6667854523bb355b50a4ffb3da5e13c1b5cf09'
+revision='bb38629f825339f64c4b5b0018c3dde47787d9a2'
 for ext in ('sh','ps1'):
     lines=[]
     for stem in ('pi','dsh','lmm','lmm-use'):

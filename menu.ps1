@@ -4,9 +4,9 @@ param([switch]$Help)
 $ErrorActionPreference = 'Stop'
 if ($Help) { Write-Output 'LMM menu: .\menu.ps1 [-Help]. Interactive terminal required.'; exit 0 }
 $hashes = @{
-  'pi.ps1' = '32f69187d3cc2677e6d11ef0df74f2d98a6903766a25f1860a2dccc4b1c41326'
-  'dsh.ps1' = '38d708ba3c06508349c47d541dfe6bc5c480402855f3a0f16ecc8bee5b2f3919'
-  'lmm.ps1' = '25e44d51b0e378ae998c8a879fe875656a4f6d527968317a068f954a7abbab13'
+  'pi.ps1' = '687fb5800a9c3f4d029ad47df9813768d67b083045d7122842fb8112254ecbb7'
+  'dsh.ps1' = '6d47bb6ccb0f5e28c0b1c5b35a587a53a3e7ae8b7ca412a3fa63cd299acbdd00'
+  'lmm.ps1' = '7ed5ea27c157a13d2603123776666af12781ebcb396e01bc9f07a63bbb8d46c7'
   'lmm-use.ps1' = 'ac137e30b6609580cb6ee4fbb60ed77ed01ec6153b733140540d5bc38d9179c1'
 }
 $network = 'auto'
@@ -25,7 +25,7 @@ function Fetch-Script([string]$Name) {
   $path = Join-Path $work $Name
   if ((Test-Path -LiteralPath $path) -and ((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash -eq $hashes[$Name])) { return $path }
   Write-Host '正在获取并校验安装程序（下载慢时会重试）…'
-  foreach ($url in @("https://api.lmm.best/scripts/$Name", "https://raw.githubusercontent.com/TokenNotIncluded/lmm-scripts/5b6667854523bb355b50a4ffb3da5e13c1b5cf09/$Name")) {
+  foreach ($url in @("https://api.lmm.best/scripts/$Name", "https://raw.githubusercontent.com/TokenNotIncluded/lmm-scripts/bb38629f825339f64c4b5b0018c3dde47787d9a2/$Name")) {
     for ($attempt = 1; $attempt -le 3; $attempt++) {
       try {
         Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $path -TimeoutSec 120 -ErrorAction Stop
