@@ -12,8 +12,8 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $Target = 'lmm'
-$ScriptVersion = '2026.09.20.4'
-$LibRevision = '60692bd80622a0d3d80ee501eacb8db139641a3e'
+$ScriptVersion = '2026.09.20.5'
+$LibRevision = 'cced5d9313020a87b10774a1445d5e44a973a7fa'
 $LmmVersion = '0.1.0'
 $LmmReleaseBase = 'https://github.com/TokenNotIncluded/api.lmm.best/releases/download/lmm-cli-v0.1.0'
 $LmmHashes = @{

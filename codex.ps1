@@ -5,7 +5,7 @@ param([string]$Root='', [string]$Version='',
   [Parameter(ValueFromRemainingArguments=$true)][string[]]$RunArgs=@())
 $ErrorActionPreference='Stop'
 $Target='codex'
-$LibRevision='60692bd80622a0d3d80ee501eacb8db139641a3e'
+$LibRevision='cced5d9313020a87b10774a1445d5e44a973a7fa'
 if ($Help) {
   Write-Output "Install $Target. Options: -Check -Update -Launch -DryRun -Root PATH -Version VERSION -Network official. Uses upstream locations and update policies. LMM_LIB_DIR selects local helpers."
   exit 0

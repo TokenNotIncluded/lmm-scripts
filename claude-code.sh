@@ -3,7 +3,7 @@ lmm_entry() {
 set -euo pipefail
 # shellcheck disable=SC2034
 TARGET=claude-code
-LIB_REVISION=60692bd80622a0d3d80ee501eacb8db139641a3e
+LIB_REVISION=cced5d9313020a87b10774a1445d5e44a973a7fa
 for arg in "$@"; do
   case "$arg" in --) break;; --help|-h)
     printf '%s\n' "Install $TARGET" 'Options: --check --update --launch --dry-run --install-deps' '         --root PATH --version VERSION --network auto|official|china' '         --distro NAME (Termux Linux guest; default ubuntu) -- [launch arguments]' 'Uses upstream locations and update policies. LMM_LIB_DIR selects local helpers.'

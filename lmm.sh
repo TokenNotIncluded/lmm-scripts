@@ -6,8 +6,8 @@ lmm_install_main() {
 set -euo pipefail
 set +x
 TARGET=lmm
-SCRIPT_VERSION=2026.09.20.4
-LIB_REVISION=60692bd80622a0d3d80ee501eacb8db139641a3e
+SCRIPT_VERSION=2026.09.20.5
+LIB_REVISION=cced5d9313020a87b10774a1445d5e44a973a7fa
 LMM_VERSION=0.1.0
 LMM_RELEASE_BASE=https://github.com/TokenNotIncluded/api.lmm.best/releases/download/lmm-cli-v0.1.0
 lmm_hash() { case "$1" in
