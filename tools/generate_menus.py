@@ -5,7 +5,7 @@ import argparse, hashlib, subprocess
 from render import emit, libraries
 p=Path(__file__).resolve().parents[1]
 a=argparse.ArgumentParser();a.add_argument('--check',action='store_true');args=a.parse_args()
-revision='95c162c2031ecba34942b2a91631c1ec1f6f3d05'
+revision='b21e36ecfdae2a1c97f86177f841635552ec40db'
 for ext in ('sh','ps1'):
     lines=[]
     for stem in ('pi','dsh','lmm','lmm-use'):
