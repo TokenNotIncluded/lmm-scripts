@@ -1,0 +1,18 @@
+[CmdletBinding(PositionalBinding=$false)]
+param([string]$Root='', [string]$Version='',
+  [ValidateSet('auto','official','china')][string]$Network='official',
+  [switch]$Check,[switch]$Update,[switch]$Launch,[switch]$DryRun,[switch]$Help,
+  [Parameter(ValueFromRemainingArguments=$true)][string[]]$RunArgs=@())
+$ErrorActionPreference='Stop'
+$Target='@@TARGET@@'
+$LibRevision='@@REVISION@@'
+if ($Help) {
+  Write-Output "Install $Target. Options: -Check -Update -Launch -DryRun -Root PATH -Version VERSION -Network official. Uses upstream locations and update policies. LMM_LIB_DIR selects local helpers."
+  exit 0
+}
+@@LOADER@@
+try {
+  . (Get-LmmLibrary 'external.ps1')
+  Invoke-ExternalSetup -Target $Target -Root $Root -Version $Version -Network $Network -Check:$Check -Update:$Update -Launch:$Launch -DryRun:$DryRun -RunArgs $RunArgs
+  exit 0
+} catch { Write-Error $_ -ErrorAction Continue; exit 1 }

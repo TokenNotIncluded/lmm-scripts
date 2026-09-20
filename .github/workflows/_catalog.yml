@@ -1,0 +1,62 @@
+name: Prepare compact tool catalog
+on:
+  push:
+    branches: [codex/official-installers-20260920]
+    paths: [tools/_catalog_patch.py, .github/workflows/_catalog.yml]
+permissions:
+  contents: write
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: 24.21.0
+      - name: Compose, test and pin modules
+        run: |
+          python3 tools/_catalog_patch.py
+          rm tools/_catalog_patch.py
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add templates tools README.md docs tests
+          git commit -m 'refactor: share lifecycle helpers and delegate new tools to official installers'
+          python3 - <<'PY'
+          from pathlib import Path
+          import json, subprocess
+          p=Path('versions.json'); v=json.loads(p.read_text(encoding='utf-8'))
+          v['library_revision']=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+          v['script_version']='2026.09.20.4'
+          p.write_text(json.dumps(v,indent=2)+'\n',encoding='utf-8')
+          PY
+          python3 tools/generate.py
+          python3 tools/generate.py --check
+          git add versions.json '*.sh' '*.ps1'
+          git commit -m 'feat: publish compact Codex Claude Code CC Switch and Clash Verge Rev installers'
+          python3 - <<'PY'
+          from pathlib import Path
+          import re, subprocess
+          p=Path('tools/generate_menus.py')
+          sha=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+          text,count=re.subn(r"revision='[0-9a-f]{40}'",f"revision='{sha}'",p.read_text(encoding='utf-8'))
+          assert count==1
+          p.write_text(text,encoding='utf-8')
+          PY
+          python3 tools/generate_menus.py
+          python3 tools/generate_menus.py --check
+          python3 tests/test_installers.py
+          python3 tests/test_official_policy.py
+          python3 tests/test_library_loader.py
+          python3 tests/test_external.py
+          python3 tests/test_catalog.py
+          shellcheck *.sh
+          pwsh -NoProfile -File tests/test-powershell.ps1
+          pwsh -NoProfile -File tests/test-library-loader.ps1
+          pwsh -NoProfile -File tests/test-external.ps1
+          git add tools/generate_menus.py menu.sh menu.ps1
+          git commit -m 'feat: drive both menus from one seven-tool catalog'
+          wc -c pi.sh dsh.sh lmm.sh codex.sh claude-code.sh cc-switch.sh clash-verge-rev.sh
+          git push origin HEAD:codex/official-installers-20260920

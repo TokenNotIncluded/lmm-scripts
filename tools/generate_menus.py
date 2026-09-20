@@ -1,18 +1,36 @@
 #!/usr/bin/env python3
-"""Pin menu payloads to a reviewed installer revision, not a moving branch."""
-from pathlib import Path
-import argparse, hashlib, subprocess
-from render import emit, libraries
-p=Path(__file__).resolve().parents[1]
-a=argparse.ArgumentParser();a.add_argument('--check',action='store_true');args=a.parse_args()
+"""Generate both menus from the installer catalog and one published revision."""
+import argparse
+import hashlib
+import shlex
+import subprocess
+from catalog import TOOLS
+from render import ROOT, emit, libraries, template
+
 revision='9c8f76329ec7846e5b899b2e9fef2320172cdbb7'
-for ext in ('sh','ps1'):
-    lines=[]
-    for stem in ('pi','dsh','lmm','lmm-use'):
-        name=f'{stem}.{ext}'
-        payload=subprocess.check_output(['git','show',f'{revision}:{name}'],cwd=p)
-        sha=hashlib.sha256(payload).hexdigest()
-        lines.append(f"{name}) printf '%s' '{sha}';;" if ext=='sh' else f"  '{name}' = '{sha}'")
-    text=(p/f'templates/menu.{ext}.in').read_text(encoding='utf-8').replace('@@REVISION@@',revision).replace('@@HASHES@@','\n'.join(lines))
-    if ext=='sh': text=text.replace('@@LIBRARIES@@',libraries('lib/root.sh','lib/hash.sh','lib/termux.sh'))
-    emit(f'menu.{ext}',text,args.check,'utf-8-sig' if ext=='ps1' else 'utf-8')
+
+
+def main():
+    parser=argparse.ArgumentParser()
+    parser.add_argument('--check', action='store_true')
+    args=parser.parse_args()
+    for ext in ('sh', 'ps1'):
+        hashes=[]
+        for stem in [name for name, _, _ in TOOLS] + ['lmm-use']:
+            name=f'{stem}.{ext}'
+            payload=subprocess.check_output(['git','show',f'{revision}:{name}'],cwd=ROOT)
+            digest=hashlib.sha256(payload).hexdigest()
+            hashes.append(f"{name}) printf '%s' '{digest}';;" if ext=='sh' else f"  '{name}' = '{digest}'")
+        if ext=='sh':
+            catalog='\n'.join(key+'=('+' '.join(shlex.quote(row[index]) for row in TOOLS)+')' for index,key in enumerate(('tools','labels','kinds')))
+        else:
+            catalog='$tools=@(\n'+',\n'.join("  @{Name='%s';Label='%s';Kind='%s'}" % row for row in TOOLS)+'\n)'
+        text=template(f'menu.{ext}.in').replace('@@CATALOG@@',catalog)
+        text=text.replace('@@REVISION@@',revision).replace('@@HASHES@@','\n'.join(hashes))
+        if ext=='sh':
+            text=text.replace('@@LIBRARIES@@',libraries('lib/root.sh','lib/hash.sh','lib/termux.sh'))
+        emit(f'menu.{ext}',text,args.check,'utf-8-sig' if ext=='ps1' else 'utf-8')
+
+
+if __name__=='__main__':
+    main()
