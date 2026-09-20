@@ -1,0 +1,62 @@
+name: Verify UTF-8 installer paths
+on:
+  push:
+    branches: [codex/official-installers-20260920]
+    paths: [.github/workflows/_prepare-official.yml]
+permissions:
+  contents: write
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          fetch-depth: 0
+      - name: Correct UTF-8 reads and regenerate
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('templates/install.ps1.in')
+          text = p.read_text(encoding='utf-8')
+          replacements = {
+              'Get-Content -LiteralPath $settingsPath -Raw | ConvertFrom-Json': 'Get-Content -LiteralPath $settingsPath -Raw -Encoding UTF8 | ConvertFrom-Json',
+              "Get-Content -LiteralPath (Join-Path $packageRoot 'package.json') -Raw | ConvertFrom-Json": "Get-Content -LiteralPath (Join-Path $packageRoot 'package.json') -Raw -Encoding UTF8 | ConvertFrom-Json",
+          }
+          for old, new in replacements.items():
+              assert text.count(old) == 1, old
+              text = text.replace(old, new)
+          p.write_text(text, encoding='utf-8')
+          p = Path('tests/test-official-policy.ps1')
+          text = p.read_text(encoding='utf-8')
+          old = "$custom=Join-Path $testRoot 'custom bash.exe'; Set-Content -LiteralPath $custom -Value ''"
+          new = "$custom=Join-Path $testRoot ('custom '+[char]0x6D4B+[char]0x8BD5+' bash.exe'); Set-Content -LiteralPath $custom -Value ''"
+          assert text.count(old) == 1
+          text = text.replace(old, new)
+          old = '@{shellPath=$custom} | ConvertTo-Json | Set-Content -LiteralPath $config'
+          new = "[IO.File]::WriteAllText($config,(@{shellPath=$custom} | ConvertTo-Json),[Text.UTF8Encoding]::new($false))"
+          assert text.count(old) == 1
+          text = text.replace(old, new)
+          p.write_text(text, encoding='utf-8')
+          PY
+          python3 tools/generate.py
+          python3 tools/generate.py --check
+          pwsh -NoProfile -File tests/test-powershell.ps1
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add templates/install.ps1.in pi.ps1 dsh.ps1 lmm.ps1 tests/test-official-policy.ps1
+          git commit -m 'fix: preserve UTF-8 shell paths and package manifests on PowerShell 5.1'
+          python3 - <<'PY'
+          from pathlib import Path
+          import re, subprocess
+          p = Path('tools/generate_menus.py')
+          revision = subprocess.check_output(['git','rev-parse','HEAD'], text=True).strip()
+          text, count = re.subn(r"revision='[0-9a-f]{40}'", f"revision='{revision}'", p.read_text(encoding='utf-8'))
+          assert count == 1
+          p.write_text(text, encoding='utf-8')
+          PY
+          python3 tools/generate_menus.py
+          python3 tools/generate_menus.py --check
+          git add tools/generate_menus.py menu.sh menu.ps1
+          git commit -m 'fix: update menu pins for UTF-8 path handling'
+          git push origin HEAD:codex/official-installers-20260920
