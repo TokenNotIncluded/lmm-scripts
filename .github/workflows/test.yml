@@ -37,6 +37,7 @@ jobs:
         run: |
           python3 tests/test_installers.py
           python3 tests/test_official_policy.py
+          python3 tests/test_library_loader.py
       - name: ShellCheck
         if: runner.os == 'Linux'
         run: shellcheck *.sh
@@ -45,12 +46,14 @@ jobs:
         run: |
           ./tests/test-powershell.ps1
           ./tests/test-official-policy.ps1
+          ./tests/test-library-loader.ps1
       - name: Windows PowerShell 5.1 checks
         if: runner.os == 'Windows'
         shell: powershell
         run: |
           .\tests\test-powershell.ps1
           .\tests\test-official-policy.ps1
+          .\tests\test-library-loader.ps1
       - name: Install real Pi on Unix with lifecycle scripts disabled
         if: runner.os != 'Windows'
         shell: bash

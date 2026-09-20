@@ -4,10 +4,12 @@ set -euo pipefail
 set +x
 @@CONSTANTS@@
 @@LIBRARIES@@
-ROOT=$(lmm_root)
+ROOT=${LMM_INSTALL_ROOT:-${XDG_DATA_HOME:-$HOME/.local/share}/lmm-tools}
 NETWORK=auto PROFILE=web CHECK=0 FORCE=0 LAUNCH=0 ADD_PATH=0 SOURCE=0
 STAGE='' LOCKED=0 PHASE=arguments
 RUN_ARGS=()
+# State is consumed by dynamically imported helpers.
+# shellcheck disable=SC2034
 @@CLIENT_STATE@@
 PNPM_BIN=''
 log() { printf '[lmm %s] %s\n' "$TARGET" "$*" >&2; }
@@ -29,9 +31,12 @@ Usage: bash $TARGET.sh [options] [-- launch arguments]
   --from-source        LMM CLI: build the pinned crate using existing Rust 1.88+
   --launch             Start the installed tool (DSH starts the chosen profile)
   --help               Show this help
-No automatic login or PATH changes. Versions and platform notes: README.md.
+Common functions load from GitHub. LMM_LIB_DIR selects local libraries (no fetch).
+No automatic login or PATH changes. See README.md.
 USAGE
 }
+# State is consumed by dynamically imported helpers.
+# shellcheck disable=SC2034
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --help|-h) usage; exit 0;;
@@ -69,6 +74,7 @@ case "$PROFILE" in web|headless) ;; *) fail 'profile must be web or headless';; 
 [ "$TARGET" = lmm ] || [ "$SOURCE" = 0 ] || fail '--from-source is only for lmm'
 case "$ROOT" in *$'\n'*|*$'\r'*) fail 'Install path must not contain newlines';; /*) ;; *) ROOT="$PWD/$ROOT";; esac
 if [ "$ROOT" = / ] || [ "$ROOT" = "$HOME" ]; then fail 'Choose a dedicated installation directory'; fi
+@@LOAD_LIBRARIES@@
 case "$(uname -s)" in Linux|Android) OS=linux;; Darwin) OS=darwin;; *) fail 'Use the .ps1 script on Windows.';; esac
 if lmm_is_termux; then OS=android; fi
 case "$(uname -m)" in
@@ -84,7 +90,7 @@ if [ "$OS" = android ] && [ "$TARGET" != lmm ]; then
   compatible_node || fail 'In Termux, install native Node/npm: pkg install nodejs npm git; then rerun. Desktop Node cannot run on Android.'
   command -v git >/dev/null 2>&1 || fail 'Pi/DSH need git: pkg install git'
 fi
-# --check never creates directories, downloads, edits PATH or touches credentials.
+# --check does not write files; common modules may be fetched into memory.
 if [ "$CHECK" = 1 ]; then
   log "Platform: $PLATFORM; install root: $ROOT"
   if [ -x "$ROOT/bin/$TARGET" ]; then "$ROOT/bin/$TARGET" --version

@@ -27,6 +27,7 @@ LMM $Target installer $ScriptVersion
 Usage: .\$Target.ps1 [-Check] [-Update] [-Root PATH] [-Network auto|official|china]
                     [-Profile web|headless] [-AddPath] [-NoPath] [-NoInstallNode]
                     [-FromSource] [-Launch] [-Help]
+Common functions load from GitHub. LMM_LIB_DIR selects local libraries (no fetch).
 No automatic login or PATH changes. Pi on Windows requires Bash.
 -FromSource is for the LMM CLI and requires existing Rust 1.88+ and build tools.
 "@
@@ -120,7 +121,13 @@ function Invoke-LmmSetup {
 }
 $savedEnvironment=@{}
 foreach($name in @('PATH','npm_config_cache','npm_config_fetch_retries','npm_config_fetch_timeout','npm_config_prefer_offline','npm_config_fetch_retry_mintimeout','npm_config_fetch_retry_maxtimeout','npm_config_strict_ssl','npm_config_registry','npm_config_store_dir')) { $savedEnvironment[$name]=[Environment]::GetEnvironmentVariable($name,'Process') }
-try { Invoke-LmmSetup; exit 0 }
+try {
+  if ($Help) { Show-Usage; exit 0 }
+  $script:Phase='libraries'
+  @@LOAD_LIBRARIES@@
+  $script:Phase='arguments'
+  Invoke-LmmSetup; exit 0
+}
 catch { Write-Error "Stopped during $script:Phase. $($_.Exception.Message)" -ErrorAction Continue; exit 1 }
 finally {
   foreach($name in $savedEnvironment.Keys) { [Environment]::SetEnvironmentVariable($name,$savedEnvironment[$name],'Process') }

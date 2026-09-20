@@ -72,6 +72,23 @@ powershell -ExecutionPolicy Bypass -File .\pi.ps1 -Check
 
 安装 DSH 或 LMM CLI 时，把文件名中的 `pi` 换成 `dsh` 或 `lmm`。DSH 可选 `--profile headless` / `-Profile headless`。固定版本见 [versions.json](versions.json)，宿主与插件须一起验证后升级。
 
+## 公共函数加载
+
+默认从 `versions.json` 的 `library_revision` 获取 GitHub 公共模块。Shell 完整获取文件后通过 `source <(...)` 导入；PowerShell 使用对应的点导入。没有公共模块哈希清单，不内嵌另一套备用库。下载失败就停止，不执行部分响应。
+
+`--help` / `-Help` 不联网。`--check` / `-Check` 不修改安装文件，但默认需要联网加载公共模块。断网或调试时，明确指定同版本的本地公共目录：
+
+```sh
+LMM_LIB_DIR="$PWD/templates/lib" bash pi.sh --check
+```
+
+```powershell
+$env:LMM_LIB_DIR = Join-Path $PWD 'templates/lib'
+.\pi.ps1 -Check
+```
+
+本地目录缺少模块时直接报错，不偷偷转为联网。这里只控制公共函数的来源；安装客户端仍可能需要下载软件包。`--network` 控制软件包来源，不改变公共模块的 GitHub 地址。客户端安装完成后的启动入口不需要重新获取这些模块。
+
 ## 环境与故障
 
 默认目录：Unix 为 `${XDG_DATA_HOME:-~/.local/share}/lmm-tools`，Windows 为 `%LOCALAPPDATA%\lmm-tools`；可用 `LMM_INSTALL_ROOT` 或 `--root` / `-Root` 修改。不覆盖系统 Node 或全局 npm 包。
@@ -82,7 +99,7 @@ Pi 使用官方的 `npm install --ignore-scripts`，接受已有的 `ignore-scri
 
 LMM CLI 预编译包仅提供 Linux x64（glibc 2.39+）、macOS arm64、Windows x64。其他平台可在准备 Rust 1.88+ 和编译工具后尝试 `--from-source`，不保证所有平台都能构建。
 
-公共函数、生成方式、缓存、PATH 恢复和卸载注意事项见 [维护说明](docs/maintenance.md)。发布脚本仍可单文件运行，不需要另外下载公共函数库。
+公共函数、生成方式、缓存、PATH 恢复和卸载注意事项见 [维护说明](docs/maintenance.md)。安装器运行时从固定 Git 提交加载公共函数，不再把它们复制进每个发布脚本。
 
 ## 文档依据
 

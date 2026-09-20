@@ -4,7 +4,8 @@ lmm_install_main() {
 set -euo pipefail
 set +x
 TARGET=lmm
-SCRIPT_VERSION=2026.09.20.2
+SCRIPT_VERSION=2026.09.20.3
+LIB_REVISION=ce6aea96cd73d633424daaa6e2e25ac18fd33b5c
 LMM_VERSION=0.1.0
 LMM_RELEASE_BASE=https://github.com/TokenNotIncluded/api.lmm.best/releases/download/lmm-cli-v0.1.0
 lmm_hash() { case "$1" in
@@ -14,100 +15,34 @@ lmm_hash() { case "$1" in
   *) printf '\n';;
 esac; }
 
-lmm_root() {
-  printf '%s\n' "${LMM_INSTALL_ROOT:-${XDG_DATA_HOME:-$HOME/.local/share}/lmm-tools}"
-}
-sha256() {
-  local digest
-  if command -v sha256sum >/dev/null 2>&1; then digest=$(sha256sum "$1") || return; printf '%s\n' "${digest%% *}"
-  elif command -v shasum >/dev/null 2>&1; then digest=$(shasum -a 256 "$1") || return; printf '%s\n' "${digest%% *}"
-  elif command -v openssl >/dev/null 2>&1; then digest=$(openssl dgst -sha256 "$1") || return; printf '%s\n' "${digest##* }"
-  else printf 'Install a SHA-256 tool.\n' >&2; return 1; fi
-}
-# Native Termux uses Android/bionic, not desktop Linux/glibc.
-lmm_is_termux() {
-  [ -n "${TERMUX_VERSION:-}${TERMUX_APP__PACKAGE_NAME:-}" ] ||
-    case "${PREFIX:-}" in */com.termux/files/usr) true;; *) false;; esac
-}
-lmm_temp_root() {
-  if [ -n "${TMPDIR:-}" ]; then printf '%s\n' "$TMPDIR"
-  elif lmm_is_termux; then printf '%s/tmp\n' "${PREFIX:-$HOME/.cache/lmm-tools}"
-  else printf '/tmp\n'; fi
-}
-lmm_check_storage() {
-  lmm_is_termux || return 0
-  local resolved
-  # realpath -m also resolves missing paths and symlinked storage aliases.
-  command -v realpath >/dev/null 2>&1 || {
-    printf 'Termux needs coreutils: pkg install coreutils\n' >&2; return 1;
-  }
-  resolved=$(realpath -m -- "$1") || return 1
-  case "$resolved/" in
-    /sdcard/*|/storage/*|/mnt/sdcard/*|/mnt/media_rw/*|/mnt/runtime/*|/mnt/user/*|/mnt/pass_through/*)
-      printf 'Use Termux private storage under HOME, not shared storage: %s\n' "$1" >&2
-      return 1;;
-  esac
-}
-quote_sh() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
-rank_urls() {
-  local i=0 url response code elapsed probe_dir
-  if ! command -v curl >/dev/null 2>&1; then for url in "$@"; do printf '%s\n' "$i"; i=$((i+1)); done; return; fi
-  probe_dir=$(mktemp -d "$STAGE/probes.XXXXXX")
-  for url in "$@"; do
-    (
-      response=$(curl -q --proto '=https' --proto-redir '=https' -ILs --connect-timeout 3 --max-time 5 -o /dev/null -w '%{http_code} %{time_starttransfer}' "$url" 2>/dev/null || true)
-      code=${response%% *}; elapsed=${response#* }
-      case "$code" in 2??|3??) ;; *) elapsed=999;; esac
-      case "$elapsed" in ''|*[!0-9.]*) elapsed=999;; esac
-      printf '%s %s\n' "$elapsed" "$i" > "$probe_dir/$i"
-    ) &
-    i=$((i+1))
-  done
-  wait
-  cat "$probe_dir"/* | sort -n -k1,1 -k2,2 | while read -r elapsed index; do printf '%s\n' "$index"; done
-}
-urls_for() {
-  URLS=("$1")
-  case "$1" in
-    https://nodejs.org/dist/*) MIRRORS=("https://npmmirror.com/mirrors/node/${1#https://nodejs.org/dist/}");;
-    https://github.com/*) MIRRORS=("https://ghfast.top/$1" "https://ghproxy.net/$1");;
-    *) MIRRORS=();;
-  esac
-  case "$NETWORK" in
-    auto) URLS+=("${MIRRORS[@]}");;
-    china) URLS=("${MIRRORS[@]}" "$1");;
-  esac
-}
-download() {
-  local official=$1 destination=$2 expected=$3 index url part attempt actual order transfer_status
-  part="$destination.part"
-  if [ -L "$destination" ] || [ -L "$part" ] || [ -L "$part.url" ]; then fail 'Refusing symlink cache entries'; fi
-  if [ "$FORCE" = 0 ] && [ -f "$destination" ] && [ "$(sha256 "$destination")" = "$expected" ]; then log "Cached: ${destination##*/}"; return; fi
-  if [ -f "$part" ] && [ "$(sha256 "$part")" = "$expected" ]; then mv -f -- "$part" "$destination"; rm -f -- "$part.url"; return; fi
-  command -v curl >/dev/null 2>&1 || fail 'curl is required for downloads. Install it with your OS package manager.'
-  if [[ $official == https://nodejs.org/dist/* && -n ${LMM_NODE_BASE_URL:-} ]]; then official="${LMM_NODE_BASE_URL%/}/${official#https://nodejs.org/dist/}"; fi
-  urls_for "$official"
-  if [ "$NETWORK" = auto ]; then order=$(rank_urls "${URLS[@]}"); else order=$(printf '%s\n' "${!URLS[@]}"); fi
-  for index in $order; do
-    url=${URLS[$index]}
-    if [ -f "$part" ] && [ "$(cat "$part.url" 2>/dev/null || true)" != "$url" ]; then rm -f -- "$part"; fi
-    printf '%s\n' "$url" > "$part.url"
-    for ((attempt=1; attempt<=RETRIES; attempt++)); do
-      log "Downloading ${destination##*/} (source $((index+1)), attempt $attempt; low-speed cutoff ${STALL_TIMEOUT}s)"
-      if curl -q --proto '=https' --proto-redir '=https' -fL --connect-timeout "$CONNECT_TIMEOUT" --max-time "$DOWNLOAD_TIMEOUT" --speed-time "$STALL_TIMEOUT" --speed-limit "$MIN_SPEED" --continue-at - --output "$part" "$url"; then
-        actual=$(sha256 "$part")
-        if [ "$actual" = "$expected" ]; then mv -f -- "$part" "$destination"; rm -f -- "$part.url"; return; fi
-        log 'Checksum mismatch: discarded the download; it will not be executed.'
-        rm -f -- "$part"
+# Fetch completely before sourcing: process substitution alone hides curl errors.
+lmm_source_lib() {
+  local lmm_name=$1 lmm_text='' lmm_attempt
+  if [ -n "${LMM_LIB_DIR:-}" ]; then
+    lmm_text=$(cat -- "$LMM_LIB_DIR/$lmm_name") || {
+      printf 'Cannot read local library: %s/%s\n' "$LMM_LIB_DIR" "$lmm_name" >&2; return 1;
+    }
+  else
+    for lmm_attempt in 1 2 3; do
+      if lmm_text=$(curl -q -fsSL --proto '=https' --proto-redir '=https' \
+          --connect-timeout 10 --max-time 60 \
+          "https://raw.githubusercontent.com/TokenNotIncluded/lmm-scripts/$LIB_REVISION/templates/lib/$lmm_name"); then
         break
-      else transfer_status=$?; fi
-      # A server may reject Range; retry once from a clean file. Retain a
-      # partial transfer after final failure for the next invocation.
-      if [ "$attempt" = 1 ]; then case "$transfer_status" in 22|33|36) rm -f -- "$part";; esac; fi
+      fi
+      if [ "$lmm_attempt" = 3 ]; then
+        printf 'Cannot load library %s at %s. Check the network or set LMM_LIB_DIR.\n' "$lmm_name" "$LIB_REVISION" >&2
+        return 1
+      fi
     done
-  done
-  fail "Download failed: ${destination##*/}. Rerun to resume, or choose another --network mode."
+  fi
+  if [[ $lmm_text != *[![:space:]]* ]]; then
+    printf 'Cannot load library %s at %s. Check the network or set LMM_LIB_DIR.\n' "$lmm_name" "$LIB_REVISION" >&2
+    return 1
+  fi
+  # shellcheck disable=SC1090
+  source <(printf '%s\n' "$lmm_text")
 }
+
 install_lmm() {
   PHASE='LMM CLI'
   local hash target="$ROOT/apps/lmm/$LMM_VERSION-$PLATFORM" archive
@@ -139,10 +74,12 @@ install_lmm() {
 }
 install_tool() { install_lmm; }
 
-ROOT=$(lmm_root)
+ROOT=${LMM_INSTALL_ROOT:-${XDG_DATA_HOME:-$HOME/.local/share}/lmm-tools}
 NETWORK=auto PROFILE=web CHECK=0 FORCE=0 LAUNCH=0 ADD_PATH=0 SOURCE=0
 STAGE='' LOCKED=0 PHASE=arguments
 RUN_ARGS=()
+# State is consumed by dynamically imported helpers.
+# shellcheck disable=SC2034
 
 PNPM_BIN=''
 log() { printf '[lmm %s] %s\n' "$TARGET" "$*" >&2; }
@@ -164,9 +101,12 @@ Usage: bash $TARGET.sh [options] [-- launch arguments]
   --from-source        LMM CLI: build the pinned crate using existing Rust 1.88+
   --launch             Start the installed tool (DSH starts the chosen profile)
   --help               Show this help
-No automatic login or PATH changes. Versions and platform notes: README.md.
+Common functions load from GitHub. LMM_LIB_DIR selects local libraries (no fetch).
+No automatic login or PATH changes. See README.md.
 USAGE
 }
+# State is consumed by dynamically imported helpers.
+# shellcheck disable=SC2034
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --help|-h) usage; exit 0;;
@@ -204,6 +144,9 @@ case "$PROFILE" in web|headless) ;; *) fail 'profile must be web or headless';; 
 [ "$TARGET" = lmm ] || [ "$SOURCE" = 0 ] || fail '--from-source is only for lmm'
 case "$ROOT" in *$'\n'*|*$'\r'*) fail 'Install path must not contain newlines';; /*) ;; *) ROOT="$PWD/$ROOT";; esac
 if [ "$ROOT" = / ] || [ "$ROOT" = "$HOME" ]; then fail 'Choose a dedicated installation directory'; fi
+for library in hash.sh termux.sh quote.sh download.sh; do
+  lmm_source_lib "$library" || exit $?
+done
 case "$(uname -s)" in Linux|Android) OS=linux;; Darwin) OS=darwin;; *) fail 'Use the .ps1 script on Windows.';; esac
 if lmm_is_termux; then OS=android; fi
 case "$(uname -m)" in
@@ -219,7 +162,7 @@ if [ "$OS" = android ] && [ "$TARGET" != lmm ]; then
   compatible_node || fail 'In Termux, install native Node/npm: pkg install nodejs npm git; then rerun. Desktop Node cannot run on Android.'
   command -v git >/dev/null 2>&1 || fail 'Pi/DSH need git: pkg install git'
 fi
-# --check never creates directories, downloads, edits PATH or touches credentials.
+# --check does not write files; common modules may be fetched into memory.
 if [ "$CHECK" = 1 ]; then
   log "Platform: $PLATFORM; install root: $ROOT"
   if [ -x "$ROOT/bin/$TARGET" ]; then "$ROOT/bin/$TARGET" --version

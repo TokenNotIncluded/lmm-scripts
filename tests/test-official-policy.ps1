@@ -6,6 +6,7 @@ if ($errors.Count) { throw ($errors | Out-String) }
 foreach ($definition in $ast.FindAll({param($a) $a -is [Management.Automation.Language.FunctionDefinitionAst]},$true)) {
   . ([scriptblock]::Create($definition.Extent.Text))
 }
+foreach($library in Get-ChildItem (Join-Path $project 'templates/lib') -Filter '*.ps1') { . $library.FullName }
 # Only these functions are exercised; never invoke the installer or download.
 if ($env:OS -ne 'Windows_NT') { Write-Host 'Windows policy tests skipped on non-Windows.'; return }
 $testRoot=Join-Path ([IO.Path]::GetTempPath()) ('lmm-policy-'+[Guid]::NewGuid().ToString('N'))

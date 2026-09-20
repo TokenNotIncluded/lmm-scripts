@@ -48,6 +48,7 @@ class InstallerTests(unittest.TestCase):
   with tarfile.open(self.archive,'w:gz') as t:
    data=b'#!/usr/bin/env bash\necho "lmm 0.1.0"\n';x=tarfile.TarInfo('lmm');x.size=len(data);x.mode=0o755;t.addfile(x,io.BytesIO(data))
   self.env=dict(os.environ,PATH=str(self.bin)+os.pathsep+os.environ['PATH'],LMM_TEST_REAL_NODE=shutil.which('node'),LMM_TEST_LOG=str(self.log),LMM_TEST_ARCHIVE=str(self.archive),LMM_TEST_CACHE=str(self.base/'npm-cache'))
+  self.env['LMM_LIB_DIR']=str(P/'templates/lib')
   for k in list(self.env):
    if k.lower().startswith('npm_config_'):self.env.pop(k)
  def tearDown(self):self.tmp.cleanup()

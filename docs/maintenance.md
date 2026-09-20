@@ -27,13 +27,17 @@ python3 tools/generate_menus.py --check
 shellcheck *.sh
 python3 tests/test_installers.py
 python3 tests/test_official_policy.py
+python3 tests/test_library_loader.py
 pwsh -NoProfile -File tests/test-powershell.ps1
 pwsh -NoProfile -File tests/test-official-policy.ps1
+pwsh -NoProfile -File tests/test-library-loader.ps1
 ```
 
-公共函数放在 `templates/lib/`，Pi、DSH、LMM 的差异放在 `templates/tools/`。`tools/render.py` 负责共用的文本读取、完整管道包装和生成检查；`tools/generate.py` 只组装当前工具需要的代码、版本和哈希。菜单复用同一份根目录、哈希和 Termux 函数，`lmm-use.sh` 也从模板生成。
+公共函数放在 `templates/lib/`，Pi、DSH、LMM 的差异放在 `templates/tools/`。`tools/render.py` 负责共用的文本读取、完整管道包装和生成检查；`tools/generate.py` 保留入口与工具差异，生成当前工具所需的公共模块加载调用。菜单复用同一份根目录、哈希和 Termux 函数，`lmm-use.sh` 也从模板生成。
 
-只修改这些源文件和版本清单，再生成根目录脚本。`.sh` 与 `.ps1` 都保留单文件入口，不在运行时下载或 `source` 公共库；网站现有同步清单无需增加运行时文件。Windows/Linux/macOS 的编码和完整脚本校验保持不变。
+只修改这些源文件和版本清单，再生成根目录脚本。`.sh` 与 `.ps1` 入口通过 GitHub 固定提交获取 `templates/lib/`，不内嵌公共库；网站同步清单无需新增公共文件。模块不维护额外哈希，原有软件包和菜单的校验逻辑保留。`LMM_LIB_DIR` 可明确改用本地目录，缺文件即失败。
+
+公共模块的提交由 `versions.json` 中的 `library_revision` 指定。修改公共库时先提交公共库，再更新这个引用并重新生成入口；只改入口时无需修改公共模块版本。测试比较该提交中的公共文件与当前源码，避免忘记更新引用。
 
 菜单的 `revision` 固定到含有目标脚本的提交，并按该提交计算 SHA-256。更新安装器后，先提交安装器，再更新 `tools/generate_menus.py` 中的 `revision` 并生成菜单，避免入口仍取旧代码。线上同步由网站仓库负责；源码提交和线上节点同步是两回事。
 

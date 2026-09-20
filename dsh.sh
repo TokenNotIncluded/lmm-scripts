@@ -4,7 +4,8 @@ lmm_install_main() {
 set -euo pipefail
 set +x
 TARGET=dsh
-SCRIPT_VERSION=2026.09.20.2
+SCRIPT_VERSION=2026.09.20.3
+LIB_REVISION=ce6aea96cd73d633424daaa6e2e25ac18fd33b5c
 NODE_VERSION=24.21.0
 PNPM_VERSION=11.7.0
 DSH_VERSION=0.1.5-rc.2
@@ -20,199 +21,34 @@ node_hash() { case "$1" in
   *) printf '\n';;
 esac; }
 
-lmm_root() {
-  printf '%s\n' "${LMM_INSTALL_ROOT:-${XDG_DATA_HOME:-$HOME/.local/share}/lmm-tools}"
-}
-sha256() {
-  local digest
-  if command -v sha256sum >/dev/null 2>&1; then digest=$(sha256sum "$1") || return; printf '%s\n' "${digest%% *}"
-  elif command -v shasum >/dev/null 2>&1; then digest=$(shasum -a 256 "$1") || return; printf '%s\n' "${digest%% *}"
-  elif command -v openssl >/dev/null 2>&1; then digest=$(openssl dgst -sha256 "$1") || return; printf '%s\n' "${digest##* }"
-  else printf 'Install a SHA-256 tool.\n' >&2; return 1; fi
-}
-# Native Termux uses Android/bionic, not desktop Linux/glibc.
-lmm_is_termux() {
-  [ -n "${TERMUX_VERSION:-}${TERMUX_APP__PACKAGE_NAME:-}" ] ||
-    case "${PREFIX:-}" in */com.termux/files/usr) true;; *) false;; esac
-}
-lmm_temp_root() {
-  if [ -n "${TMPDIR:-}" ]; then printf '%s\n' "$TMPDIR"
-  elif lmm_is_termux; then printf '%s/tmp\n' "${PREFIX:-$HOME/.cache/lmm-tools}"
-  else printf '/tmp\n'; fi
-}
-lmm_check_storage() {
-  lmm_is_termux || return 0
-  local resolved
-  # realpath -m also resolves missing paths and symlinked storage aliases.
-  command -v realpath >/dev/null 2>&1 || {
-    printf 'Termux needs coreutils: pkg install coreutils\n' >&2; return 1;
-  }
-  resolved=$(realpath -m -- "$1") || return 1
-  case "$resolved/" in
-    /sdcard/*|/storage/*|/mnt/sdcard/*|/mnt/media_rw/*|/mnt/runtime/*|/mnt/user/*|/mnt/pass_through/*)
-      printf 'Use Termux private storage under HOME, not shared storage: %s\n' "$1" >&2
-      return 1;;
-  esac
-}
-quote_sh() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
-rank_urls() {
-  local i=0 url response code elapsed probe_dir
-  if ! command -v curl >/dev/null 2>&1; then for url in "$@"; do printf '%s\n' "$i"; i=$((i+1)); done; return; fi
-  probe_dir=$(mktemp -d "$STAGE/probes.XXXXXX")
-  for url in "$@"; do
-    (
-      response=$(curl -q --proto '=https' --proto-redir '=https' -ILs --connect-timeout 3 --max-time 5 -o /dev/null -w '%{http_code} %{time_starttransfer}' "$url" 2>/dev/null || true)
-      code=${response%% *}; elapsed=${response#* }
-      case "$code" in 2??|3??) ;; *) elapsed=999;; esac
-      case "$elapsed" in ''|*[!0-9.]*) elapsed=999;; esac
-      printf '%s %s\n' "$elapsed" "$i" > "$probe_dir/$i"
-    ) &
-    i=$((i+1))
-  done
-  wait
-  cat "$probe_dir"/* | sort -n -k1,1 -k2,2 | while read -r elapsed index; do printf '%s\n' "$index"; done
-}
-urls_for() {
-  URLS=("$1")
-  case "$1" in
-    https://nodejs.org/dist/*) MIRRORS=("https://npmmirror.com/mirrors/node/${1#https://nodejs.org/dist/}");;
-    https://github.com/*) MIRRORS=("https://ghfast.top/$1" "https://ghproxy.net/$1");;
-    *) MIRRORS=();;
-  esac
-  case "$NETWORK" in
-    auto) URLS+=("${MIRRORS[@]}");;
-    china) URLS=("${MIRRORS[@]}" "$1");;
-  esac
-}
-download() {
-  local official=$1 destination=$2 expected=$3 index url part attempt actual order transfer_status
-  part="$destination.part"
-  if [ -L "$destination" ] || [ -L "$part" ] || [ -L "$part.url" ]; then fail 'Refusing symlink cache entries'; fi
-  if [ "$FORCE" = 0 ] && [ -f "$destination" ] && [ "$(sha256 "$destination")" = "$expected" ]; then log "Cached: ${destination##*/}"; return; fi
-  if [ -f "$part" ] && [ "$(sha256 "$part")" = "$expected" ]; then mv -f -- "$part" "$destination"; rm -f -- "$part.url"; return; fi
-  command -v curl >/dev/null 2>&1 || fail 'curl is required for downloads. Install it with your OS package manager.'
-  if [[ $official == https://nodejs.org/dist/* && -n ${LMM_NODE_BASE_URL:-} ]]; then official="${LMM_NODE_BASE_URL%/}/${official#https://nodejs.org/dist/}"; fi
-  urls_for "$official"
-  if [ "$NETWORK" = auto ]; then order=$(rank_urls "${URLS[@]}"); else order=$(printf '%s\n' "${!URLS[@]}"); fi
-  for index in $order; do
-    url=${URLS[$index]}
-    if [ -f "$part" ] && [ "$(cat "$part.url" 2>/dev/null || true)" != "$url" ]; then rm -f -- "$part"; fi
-    printf '%s\n' "$url" > "$part.url"
-    for ((attempt=1; attempt<=RETRIES; attempt++)); do
-      log "Downloading ${destination##*/} (source $((index+1)), attempt $attempt; low-speed cutoff ${STALL_TIMEOUT}s)"
-      if curl -q --proto '=https' --proto-redir '=https' -fL --connect-timeout "$CONNECT_TIMEOUT" --max-time "$DOWNLOAD_TIMEOUT" --speed-time "$STALL_TIMEOUT" --speed-limit "$MIN_SPEED" --continue-at - --output "$part" "$url"; then
-        actual=$(sha256 "$part")
-        if [ "$actual" = "$expected" ]; then mv -f -- "$part" "$destination"; rm -f -- "$part.url"; return; fi
-        log 'Checksum mismatch: discarded the download; it will not be executed.'
-        rm -f -- "$part"
-        break
-      else transfer_status=$?; fi
-      # A server may reject Range; retry once from a clean file. Retain a
-      # partial transfer after final failure for the next invocation.
-      if [ "$attempt" = 1 ]; then case "$transfer_status" in 22|33|36) rm -f -- "$part";; esac; fi
-    done
-  done
-  fail "Download failed: ${destination##*/}. Rerun to resume, or choose another --network mode."
-}
-compatible_node() {
-  command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1 &&
-    node -e 'const [a,b]=process.versions.node.split(".").map(Number);process.exit(((a===22&&b>=19)||a>=24)&&(process.argv[1]!=="android"||process.platform==="android")?0:1)' "$OS" >/dev/null 2>&1
-}
-ensure_node() {
-  PHASE='Node.js runtime'
-  if compatible_node; then NODE_BIN=$(dirname "$(command -v node)"); log "Using Node $(node --version)"; return; fi
-  [ "$OS" != android ] || fail 'In Termux, run pkg install nodejs npm git; desktop Node archives are incompatible.'
-  local dir="$ROOT/runtime/node-v$NODE_VERSION-$PLATFORM" hash archive
-  if [ -x "$dir/bin/node" ]; then export PATH="$dir/bin:$PATH"; fi
-  if compatible_node; then NODE_BIN="$dir/bin"; return; fi
-  [ "$INSTALL_NODE" = 1 ] || fail 'Need Node 22.19+ (22.x) or Node 24+, including npm.'
-  [ ! -f /etc/alpine-release ] || fail 'On Alpine install nodejs/npm with apk first; official Node archives require glibc.'
-  hash=$(node_hash "$PLATFORM")
-  [ -n "$hash" ] || fail "No verified Node archive for $PLATFORM"
-  archive="$CACHE/node-v$NODE_VERSION-$PLATFORM.tar.gz"
-  download "https://nodejs.org/dist/v$NODE_VERSION/${archive##*/}" "$archive" "$hash"
-  mkdir -p "$STAGE/runtime"
-  tar -xzf "$archive" -C "$STAGE/runtime"
-  "$STAGE/runtime/node-v$NODE_VERSION-$PLATFORM/bin/node" --version >/dev/null || fail 'Node cannot run on this OS/libc. Install compatible Node using your OS package manager.'
-  [ ! -e "$dir" ] || fail "Managed runtime exists but is unusable: $dir. Inspect it before replacing."
-  mv -- "$STAGE/runtime/node-v$NODE_VERSION-$PLATFORM" "$dir"
-  NODE_BIN="$dir/bin"; export PATH="$NODE_BIN:$PATH"
-}
-configure_npm() {
-  if [ -z "${npm_config_cache:-}" ]; then
-    npm_config_cache=$(npm config get cache 2>/dev/null || true)
-    case "$npm_config_cache" in /*) ;; *) npm_config_cache="$CACHE/npm";; esac
-    export npm_config_cache
-  fi
-  export npm_config_fetch_retries="$RETRIES" npm_config_fetch_timeout="$((STALL_TIMEOUT * 1000))"
-  export npm_config_fetch_retry_mintimeout=2000 npm_config_fetch_retry_maxtimeout=30000
-  export npm_config_strict_ssl=true
-  if [ -n "${LMM_NPM_REGISTRY:-}" ]; then export npm_config_registry="$LMM_NPM_REGISTRY"; fi
-  export npm_config_prefer_offline=true
-  local current order first
-  current=$(npm config get registry 2>/dev/null || true)
-  if [ -n "${npm_config_registry:-}" ] || { [ -n "$current" ] && [ "$current" != https://registry.npmjs.org/ ]; }; then
-    log 'Keeping your existing npm registry/proxy configuration.'; return
-  fi
-  NPM_SELECTED=1
-  case "$NETWORK" in
-    official) export npm_config_registry=https://registry.npmjs.org/;;
-    china) export npm_config_registry=https://registry.npmmirror.com/;;
-    auto)
-      order=$(rank_urls https://registry.npmjs.org/ https://registry.npmmirror.com/)
-      first=${order%%$'\n'*}
-      if [ "$first" = 1 ]; then export npm_config_registry=https://registry.npmmirror.com/; else export npm_config_registry=https://registry.npmjs.org/; fi;;
-  esac
-  log 'Selected a registry for this installer process only; global npm settings are unchanged.'
-}
-bounded() {
-  node - "$COMMAND_TIMEOUT" "$@" <<'JS'
-const {spawn}=require('node:child_process');
-const [seconds,command,...args]=process.argv.slice(2);
-const child=spawn(command,args,{stdio:'inherit',detached:true});
-let timedOut=false,stopping=false;
-function stop(code){if(stopping)return;stopping=true;timedOut=code===124;try{process.kill(-child.pid,'SIGTERM')}catch{};const hard=setTimeout(()=>{try{process.kill(-child.pid,'SIGKILL')}catch{}},3000);hard.unref()}
-const start=Date.now();const heartbeat=setInterval(()=>process.stderr.write(`[install] Still working: ${Math.floor((Date.now()-start)/1000)}s elapsed.\n`),15000);
-const timeout=setTimeout(()=>{process.stderr.write('[install] Operation timed out; increase LMM_COMMAND_TIMEOUT for a slow connection.\n');stop(124)},Number(seconds)*1000);
-process.on('SIGINT',()=>stop(130));process.on('SIGTERM',()=>stop(143));
-child.on('error',e=>{clearInterval(heartbeat);clearTimeout(timeout);process.stderr.write(`[install] Cannot start ${command}: ${e.code}\n`);process.exitCode=1});
-child.on('exit',(code,signal)=>{clearInterval(heartbeat);clearTimeout(timeout);process.exitCode=timedOut?124:signal?130:code??1});
-JS
-}
-with_registry_retry() {
-  if bounded "$@"; then return; fi
-  if [ "$NETWORK" = auto ] && [ "$NPM_SELECTED" = 1 ]; then
-    if [ "$npm_config_registry" = https://registry.npmjs.org/ ]; then export npm_config_registry=https://registry.npmmirror.com/; else export npm_config_registry=https://registry.npmjs.org/; fi
-    log 'Retrying the alternate registry with the same package cache.'
-    bounded "$@"
-  else fail 'Package installation failed. Check network/proxy settings or try another --network mode.'; fi
-}
-install_client() {
-  local package=$1 version=$2 entry=$3 target="$ROOT/apps/$TARGET/$2" work="$STAGE/client" allow
-  PHASE="$TARGET client"
-  if [ "$FORCE" = 0 ] && [ -x "$target/bin/$entry" ] && [ -f "$target/.lmm-managed" ] && [ "$(cat "$target/.lmm-managed")" = "$version|$SCRIPT_VERSION" ]; then CLIENT="$target/bin/$entry"; log "Client $version already installed."; return; fi
-  [ "$BOOTSTRAP" = 1 ] || fail 'Managed client is missing; rerun without --no-bootstrap.'
-  mkdir -p "$work"
-  INSTALL_ARGS=(install --global --prefix "$work" --no-audit --no-fund "$package@$version")
-  if [ "$TARGET" = pi ]; then
-    # https://pi.dev/docs/latest/quickstart: Pi ships a prebuilt CLI.
-    INSTALL_ARGS+=(--ignore-scripts)
+# Fetch completely before sourcing: process substitution alone hides curl errors.
+lmm_source_lib() {
+  local lmm_name=$1 lmm_text='' lmm_attempt
+  if [ -n "${LMM_LIB_DIR:-}" ]; then
+    lmm_text=$(cat -- "$LMM_LIB_DIR/$lmm_name") || {
+      printf 'Cannot read local library: %s/%s\n' "$LMM_LIB_DIR" "$lmm_name" >&2; return 1;
+    }
   else
-    allow='@deepseek-ai/dsh-subprocess-local,koffi,node-pty,@google/genai,protobufjs'
-    if npm install --help 2>/dev/null | grep -q -- '--allow-scripts'; then INSTALL_ARGS+=("--allow-scripts=$allow"); fi
-    [ "$(npm config get ignore-scripts 2>/dev/null || true)" != true ] || fail 'DSH needs native build scripts. Review your package-specific build policy; this installer will not override ignore-scripts=true.'
+    for lmm_attempt in 1 2 3; do
+      if lmm_text=$(curl -q -fsSL --proto '=https' --proto-redir '=https' \
+          --connect-timeout 10 --max-time 60 \
+          "https://raw.githubusercontent.com/TokenNotIncluded/lmm-scripts/$LIB_REVISION/templates/lib/$lmm_name"); then
+        break
+      fi
+      if [ "$lmm_attempt" = 3 ]; then
+        printf 'Cannot load library %s at %s. Check the network or set LMM_LIB_DIR.\n' "$lmm_name" "$LIB_REVISION" >&2
+        return 1
+      fi
+    done
   fi
-  with_registry_retry npm "${INSTALL_ARGS[@]}"
-  node "$work/bin/$entry" --version >/dev/null
-  printf '%s\n' "$version|$SCRIPT_VERSION" > "$work/.lmm-managed"
-  mkdir -p "$(dirname "$target")"
-  if [ -e "$target" ]; then
-    [ -f "$target/.lmm-managed" ] || fail "Not replacing an unowned directory: $target"
-    target="$target-reinstall-$(date +%s)-$$"
+  if [[ $lmm_text != *[![:space:]]* ]]; then
+    printf 'Cannot load library %s at %s. Check the network or set LMM_LIB_DIR.\n' "$lmm_name" "$LIB_REVISION" >&2
+    return 1
   fi
-  mv -- "$work" "$target"
-  CLIENT="$target/bin/$entry"
+  # shellcheck disable=SC1090
+  source <(printf '%s\n' "$lmm_text")
 }
+
 ensure_pnpm() {
   PHASE='DSH package manager'
   local directory="$ROOT/tools/pnpm/$PNPM_VERSION" work="$STAGE/pnpm"
@@ -243,10 +79,12 @@ install_tool() {
   with_registry_retry node "$CLIENT" plugin --profile "$PROFILE" add "$artifact" --ignore-scripts --store-dir "$CACHE/pnpm"
 }
 
-ROOT=$(lmm_root)
+ROOT=${LMM_INSTALL_ROOT:-${XDG_DATA_HOME:-$HOME/.local/share}/lmm-tools}
 NETWORK=auto PROFILE=web CHECK=0 FORCE=0 LAUNCH=0 ADD_PATH=0 SOURCE=0
 STAGE='' LOCKED=0 PHASE=arguments
 RUN_ARGS=()
+# State is consumed by dynamically imported helpers.
+# shellcheck disable=SC2034
 INSTALL_NODE=1 BOOTSTRAP=1 NPM_SELECTED=0
 PNPM_BIN=''
 log() { printf '[lmm %s] %s\n' "$TARGET" "$*" >&2; }
@@ -268,9 +106,12 @@ Usage: bash $TARGET.sh [options] [-- launch arguments]
   --from-source        LMM CLI: build the pinned crate using existing Rust 1.88+
   --launch             Start the installed tool (DSH starts the chosen profile)
   --help               Show this help
-No automatic login or PATH changes. Versions and platform notes: README.md.
+Common functions load from GitHub. LMM_LIB_DIR selects local libraries (no fetch).
+No automatic login or PATH changes. See README.md.
 USAGE
 }
+# State is consumed by dynamically imported helpers.
+# shellcheck disable=SC2034
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --help|-h) usage; exit 0;;
@@ -308,6 +149,9 @@ case "$PROFILE" in web|headless) ;; *) fail 'profile must be web or headless';; 
 [ "$TARGET" = lmm ] || [ "$SOURCE" = 0 ] || fail '--from-source is only for lmm'
 case "$ROOT" in *$'\n'*|*$'\r'*) fail 'Install path must not contain newlines';; /*) ;; *) ROOT="$PWD/$ROOT";; esac
 if [ "$ROOT" = / ] || [ "$ROOT" = "$HOME" ]; then fail 'Choose a dedicated installation directory'; fi
+for library in hash.sh termux.sh quote.sh download.sh node.sh; do
+  lmm_source_lib "$library" || exit $?
+done
 case "$(uname -s)" in Linux|Android) OS=linux;; Darwin) OS=darwin;; *) fail 'Use the .ps1 script on Windows.';; esac
 if lmm_is_termux; then OS=android; fi
 case "$(uname -m)" in
@@ -323,7 +167,7 @@ if [ "$OS" = android ] && [ "$TARGET" != lmm ]; then
   compatible_node || fail 'In Termux, install native Node/npm: pkg install nodejs npm git; then rerun. Desktop Node cannot run on Android.'
   command -v git >/dev/null 2>&1 || fail 'Pi/DSH need git: pkg install git'
 fi
-# --check never creates directories, downloads, edits PATH or touches credentials.
+# --check does not write files; common modules may be fetched into memory.
 if [ "$CHECK" = 1 ]; then
   log "Platform: $PLATFORM; install root: $ROOT"
   if [ -x "$ROOT/bin/$TARGET" ]; then "$ROOT/bin/$TARGET" --version

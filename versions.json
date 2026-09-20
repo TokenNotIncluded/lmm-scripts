@@ -1,5 +1,5 @@
 {
-  "script_version": "2026.09.20.2",
+  "script_version": "2026.09.20.3",
   "node_version": "24.21.0",
   "node_sha256": {
     "linux-x64": "6e1db87ef58b8819e5d5402eff1536491b18edd8eb7bee5ef7897876e88dc5ff",
@@ -21,5 +21,6 @@
     "darwin-arm64": "8f6b3a2d08500566b528b7089664420d3395e464c172e3a43dfcb73d37f57b3f",
     "win-x64": "d0eb3c3d3fe695eaa8a85de7c3161d0f7f17153064db5c20b8ced09defc574a9"
   },
-  "pnpm_version": "11.7.0"
+  "pnpm_version": "11.7.0",
+  "library_revision": "ce6aea96cd73d633424daaa6e2e25ac18fd33b5c"
 }

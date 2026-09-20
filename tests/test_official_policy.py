@@ -177,14 +177,15 @@ class TermuxAndCompositionTests(unittest.TestCase):
             self.assertNotIn(node, cli)
             self.assertNotIn('DSH_PROVIDER_SHA256=', pi)
 
-    def test_shared_helpers_are_embedded_once_and_remain_offline(self):
-        for target in ('pi', 'dsh', 'lmm', 'menu'):
+    def test_shared_helpers_are_loaded_not_copied(self):
+        for target in ('pi', 'dsh', 'lmm'):
             body = (P / f'{target}.sh').read_text(encoding='utf-8')
-            self.assertEqual(body.count('lmm_is_termux() {'), 1)
-            self.assertEqual(body.count('sha256() {'), 1)
-            self.assertEqual(body.count('lmm_root() {'), 1)
+            for definition in ('lmm_is_termux() {', 'sha256() {', 'lmm_root() {', 'download() {'):
+                self.assertNotIn(definition, body)
+            self.assertIn('lmm_source_lib "$library"', body)
             self.assertNotIn('@@LIBRARIES@@', body)
-            self.assertNotIn('source https:', body)
+        menu = (P / 'menu.sh').read_text(encoding='utf-8')
+        self.assertEqual(menu.count('lmm_is_termux() {'), 1)
         fixtures.subprocess.run(['python3', str(P / 'tools/generate_menus.py'), '--check'], check=True)
 
     def test_every_generated_shell_help_is_standalone(self):

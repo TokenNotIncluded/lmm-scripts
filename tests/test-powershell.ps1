@@ -8,6 +8,7 @@ foreach($file in Get-ChildItem -LiteralPath $project -Filter '*.ps1') {
 $tokens=$null;$errors=$null
 $ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $project 'lmm.ps1'),[ref]$tokens,[ref]$errors)
 foreach($definition in $ast.FindAll({param($a) $a -is [Management.Automation.Language.FunctionDefinitionAst]},$true)) { . ([scriptblock]::Create($definition.Extent.Text)) }
+foreach($library in Get-ChildItem (Join-Path $project 'templates/lib') -Filter '*.ps1') { . $library.FullName }
 $Target='test';$Network='official';$Update=$false;$script:Phase='test'
 $Retries=2;$ConnectTimeout=1;$StallTimeout=2;$DownloadTimeout=10;$CommandTimeout=1;$MinSpeed=1
 $testRoot=Join-Path ([IO.Path]::GetTempPath()) ('lmm-ps-test-'+[Guid]::NewGuid().ToString('N'))

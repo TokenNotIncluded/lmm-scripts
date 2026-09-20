@@ -1,4 +1,4 @@
-"""Build-time composition only: published scripts never source remote helpers."""
+"""Shared rendering and byte-for-byte checks for installer and menu entry points."""
 from pathlib import Path
 import re
 
