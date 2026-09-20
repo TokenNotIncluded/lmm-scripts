@@ -1,89 +1,54 @@
 # LMM 安装脚本
 
-Pi、DSH、LMM CLI、Codex、Claude Code、CC Switch、Clash Verge Rev 的安装入口。
-
-## 菜单
-
-Linux / macOS / Termux：
+根目录直接维护脚本，不生成代码。没有代理配置、测速、镜像、私有 Node、缓存或回滚框架。
 
 ```sh
-curl -fsSL https://api.lmm.best/scripts/menu.sh | bash
+curl -fsSLo menu.sh https://raw.githubusercontent.com/TokenNotIncluded/lmm-scripts/main/menu.sh
+bash menu.sh
 ```
-
-Windows PowerShell 5.1+：
 
 ```powershell
-irm https://api.lmm.best/scripts/menu.ps1 | iex
+irm https://raw.githubusercontent.com/TokenNotIncluded/lmm-scripts/main/menu.ps1 | iex
 ```
 
-选择工具，再选安装、更新、检查或启动。默认不启动应用、不登录账号。Pi/DSH/LMM 默认不改 PATH；新增工具使用官方安装位置和更新策略，官方安装器可能修改用户 PATH。桌面软件可能要求管理员授权，不自动配置订阅、启用代理或关闭系统安全提示。
+也可下载单个脚本运行。安装和更新使用同一入口；之后直接使用工具自己的命令。
 
-菜单会执行下载的代码。需要先审查时，下载脚本后再运行。`bash menu.sh --list` / `.\menu.ps1 -List` 只列出工具。
-
-## 工具与平台
-
-脚本文件名如下，Unix 使用 `.sh`，Windows 使用 `.ps1`。
-
-| 文件名 | 安装方式 | 平台说明 |
+| 文件名（`.sh` / `.ps1`） | 安装方式 | 启动 |
 |---|---|---|
-| `pi` | 固定 npm 版本及 LMM 插件 | Linux、macOS、Windows、原生 Termux；Windows 需要 Bash |
-| `dsh` | 固定 npm 版本及 profile 内的 LMM 插件 | Linux、macOS、Windows；Android 原生依赖未验证 |
-| `lmm` | 固定预编译包；可显式从源码构建 | Linux x64、macOS arm64、Windows x64；开发预览，无 Android 包 |
-| `codex` | 官方原生安装器，默认 latest | Linux、macOS、Windows；Termux 走 PRoot Linux |
-| `claude-code` | 官方原生安装器，默认 stable | Linux、macOS、Windows；Termux 走 PRoot Linux |
-| `cc-switch` | deb/rpm、现有 AUR helper、AppImage；macOS Homebrew/DMG；Windows portable ZIP | 桌面平台；Termux 不显示 |
-| `clash-verge-rev` | deb/rpm、现有 AUR helper；macOS Homebrew/DMG；Windows 官方安装窗口 | 桌面平台；不提供 AppImage 路径，Termux 不显示 |
+| `pi` | 官方 npm 命令，加 LMM 插件 | `pi`，然后 `/login` |
+| `dsh` | npm + pnpm，加 LMM 插件；默认 web profile | `dsh web` |
+| `codex` | 官方原生安装器，参数直接传给官方 | `codex` |
+| `claude-code` | 官方原生安装器，参数直接传给官方 | `claude` |
+| `cc-switch` | Linux 发行包/AUR，macOS Homebrew，Windows 官方 MSI | 桌面应用 |
+| `clash-verge-rev` | Linux deb/rpm/AUR，macOS Homebrew，Windows WinGet | 桌面应用 |
+| `lmm` | 0.1.0 预览版发行包；另支持 `--from-source` / `-FromSource` | 安装结束打印的完整路径 |
 
-Codex、Claude 原生安装不需要 Node。Linux 的依赖准备覆盖 Debian/Ubuntu、Fedora/RHEL、openSUSE、Arch、Alpine、Void；只有显式传 `--install-deps` 才安装系统依赖，不执行整机升级。Alpine 的 Claude 另需 `libgcc libstdc++ ripgrep`，启动器保留 `USE_BUILTIN_RIPGREP=0`。NixOS 需使用自身的 Nix 包环境，不支持直接套用通用二进制安装器。
+Pi/DSH 的宿主和插件保留已适配版本；其余工具交给上游维护版本。只安装软件，不写供应商配置、不登录账号、不启用系统代理或 TUN。
 
-官方依据和具体限制见 [安装方式核查](docs/install-sources.md)。模拟测试通过不代表所有发行版、硬件和图形环境都已实测。
+## 环境
 
-## 直接运行
+Unix 入口需要 Bash、curl。Pi/DSH 另需 Node 22.19+（22.x）或 24+、npm；Windows 的 Pi 需要 Git Bash。脚本不代装 Node，不修改 npm registry。
 
-先下载对应脚本，或在仓库目录执行：
+Codex/Claude 的 Linux、macOS、Windows 安装都用官方脚本，不要求 Node，也不限定 apt 发行版。先满足上游的系统和运行库要求。Alpine 的 Claude 需要 `bash curl libgcc libstdc++ ripgrep`，运行时使用 `USE_BUILTIN_RIPGREP=0 claude`。NixOS 请使用 Nix 包环境，不保证通用二进制可运行。
 
-```sh
-bash codex.sh --dry-run           # 预览安装方式
-bash codex.sh                     # 安装；已有入口则复用
-bash codex.sh --check             # 检查可执行程序
-bash codex.sh --update            # 再次运行官方安装器
-bash claude-code.sh --version latest
-bash claude-code.sh --install-deps
-```
+Linux 桌面安装需要 `jq` 及 apt/dnf/yum/zypper，Arch 复用已安装的 paru/yay；CC Switch 在其他兼容 glibc 的系统上可用 AppImage。桌面软件仍受上游系统版本和运行库限制。macOS 需要已有 Homebrew；Windows Clash 需要已有 WinGet。系统包安装会使用 sudo 或弹出官方授权窗口。
 
-Windows 对应 `-DryRun`、`-Check`、`-Update`、`-Version`，例如 `powershell -ExecutionPolicy Bypass -File .\codex.ps1 -Check`。
-
-四个新增工具均支持 `--launch` / `-Launch`、`--root` / `-Root`。`--root` 管理本站创建的辅助启动器和便携版，不改变官方原生客户端的安装目录。`--dry-run` 不安装，但默认仍会获取公共函数。桌面工具的检查只确认入口存在，不自动启动图形界面。
-
-Pi/DSH/LMM 的原有参数保持不变：`--check`、`--update`、`--launch`、`--add-path`、`--network auto|official|china`。其更新重装 [versions.json](versions.json) 固定版本，不追踪 latest；宿主与 LMM 插件需要一起验证后升级。全部参数见各脚本的 `--help` / `-Help`。
+LMM 预览包仅提供 Linux x64（glibc 2.39+）、macOS arm64、Windows x64，安装到 `~/.local/bin`，不自动改 PATH。源码安装需要 Rust 1.88+ 和编译工具；预览版 `setup` 仍不能实际安装应用。
 
 ## Termux
 
-先准备基础工具：`pkg install bash curl coreutils`。安装目录、缓存和临时文件留在私有目录，不放到 `/sdcard` 或 `/storage`。未设置 `TMPDIR` 时使用 `$PREFIX/tmp`，启动器使用当前 Bash 的绝对路径。
+Pi 使用 Termux 的原生 Node/npm：`pkg install nodejs npm git`，然后 `bash pi.sh`。DSH 使用同一 npm 安装方式，Android 原生依赖尚未真机验证。
 
-Pi 另需 `pkg install nodejs npm git`；脚本检查 Android 原生 Node，不下载桌面 Linux Node。剪贴板可选 Termux:API 应用和 `pkg install termux-api`。浏览器未打开时用 `termux-open-url` 打开登录地址。
+Codex/Claude 使用**已有的 PRoot Linux 环境**，不是 Android 原生二进制。先准备 `proot-distro` 和 Ubuntu guest，并在 guest 中安装 Bash、curl、CA 证书，再运行相应脚本。其他 guest 用 `LMM_DISTRO=名称 bash codex.sh`。安装后进入同一 guest 运行 `codex` / `claude`；不再生成转发启动器，不创建或重置 guest，不关闭沙箱。两个桌面工具不支持 Termux，菜单会隐藏它们。
 
-Codex、Claude 使用已有的 PRoot guest：
+## 从旧版切换
 
-```sh
-pkg install proot-distro
-proot-distro install ubuntu:24.04
-bash codex.sh --install-deps
-bash claude-code.sh --install-deps
-```
+旧的 `--network`、`--root`、`--check`、`--update` 等自定义参数已移除；不要继续传入。Codex/Claude 只接受各自官方参数，DSH 可传 profile。旧版 `lmm-tools` 目录不会被删除；从 PATH 中移除旧的 `lmm-tools/bin`，避免旧启动器优先于新安装。配置和账号数据不迁移、不清空。
 
-默认 guest 名称为 `ubuntu`，其他已安装环境用 `--distro NAME`。脚本不创建或重置 guest；`--install-deps` 仅自动准备 Debian/Ubuntu guest 的依赖。启动器把当前目录绑定到 guest 的 `/workspace`，原样转发参数。PRoot 不是独立 Linux 内核，不保证所有沙箱能力可用；没有关闭 Agent 沙箱作为替代。
+所有安装代码平铺在根目录；只有两个 Unix 桌面入口共用 `desktop.sh`。本地运行用同目录文件，单独下载运行时用固定 Git 提交获取共用脚本；菜单同样固定到完整的安装器提交。不维护生成器或哈希清单。
 
-Android 真机、DSH Android 原生依赖和 LMM CLI Android 源码构建尚未验证。CC Switch、Clash Verge Rev 在 Termux 菜单中隐藏。
+## 依据与测试
 
-## 使用与维护
+2026-09-21 核查：[Codex](https://learn.chatgpt.com/docs/codex/cli) · [Claude Code](https://code.claude.com/docs/en/setup) · [Pi](https://pi.dev/docs/latest/quickstart) · [Pi Termux](https://pi.dev/docs/latest/termux) · [DSH](https://github.com/deepseek-ai/deepseek-harness) · [DSH 插件](https://deepseek-harness.github.io/deepseek-harness/en/develop/basic/publish) · [CC Switch](https://github.com/farion1231/cc-switch#download--installation) · [Clash Verge Rev](https://www.clashverge.dev/install.html)。LMM 插件适配版本见 [Pi 插件](https://github.com/TokenNotIncluded/pi-lmm-provider) 和 [DSH 插件](https://github.com/TokenNotIncluded/dsh-lmm-provider)。
 
-Pi：启动后 `/login` → LMM → 浏览器授权，再用 `/model` 选模型。DSH：`dsh web` → Settings → Models → LMM；headless 登录先在同一 `DSH_HOME` 的 Web profile 完成。Codex、Claude 按各自的官方登录提示操作，安装器不代填账号或模型配置。
-
-LMM CLI 目前提供 `catalog`、`status`、`doctor --report`、`login`、`models --json`。`setup --dry-run` 只预览，不执行软件接入；退出码 3 不表示全部成功。Linux 登录需要可用的 Secret Service，SSH/容器不一定具备。
-
-Pi/DSH/LMM 默认目录为 `${XDG_DATA_HOME:-~/.local/share}/lmm-tools` 或 `%LOCALAPPDATA%\lmm-tools`，不覆盖系统 Node/npm 包。没有加入 PATH 时使用安装结束打印的完整路径。
-
-公共函数从固定 GitHub 提交加载，不再内嵌到每个安装器，也不另设公共库哈希清单。本地开发可设 `LMM_LIB_DIR="$PWD/templates/lib"`；帮助页不联网，检查模式可能获取公共函数。下载失败会停止，不把半个文件当作成功安装。
-
-网络源、生成、缓存恢复、PATH 和卸载说明见 [维护文档](docs/maintenance.md)。
+本地检查：`python3 test.py`、`pwsh -NoProfile -File test.ps1`、`shellcheck *.sh`。CI 另做三平台 CLI 实装和 Debian/Alpine 实装；不把模拟测试当作桌面 GUI、Termux 真机、账号登录或代理功能实测。
