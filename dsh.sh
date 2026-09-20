@@ -45,8 +45,14 @@ lmm_source_lib() {
     printf 'Cannot load library %s at %s. Check the network or set LMM_LIB_DIR.\n' "$lmm_name" "$LIB_REVISION" >&2
     return 1
   fi
-  # shellcheck disable=SC1090
-  source <(printf '%s\n' "$lmm_text")
+  # macOS Bash 3.2 needs a here-string when sourcing buffered text.
+  if [ "${BASH_VERSINFO[0]}" -lt 4 ]; then
+    # shellcheck disable=SC1091
+    source /dev/stdin <<< "$lmm_text"
+  else
+    # shellcheck disable=SC1090
+    source <(printf '%s\n' "$lmm_text")
+  fi
 }
 
 ensure_pnpm() {
