@@ -1,0 +1,46 @@
+name: Prepare official installer fixes
+on:
+  push:
+    branches: [codex/official-installers-20260920]
+    paths: [tools/_apply_official_fix.py, .github/workflows/_prepare-official.yml]
+permissions:
+  contents: write
+jobs:
+  prepare:
+    if: github.repository == 'TokenNotIncluded/lmm-scripts'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: 24.21.0
+      - name: Apply and test source edits
+        run: |
+          python3 tools/_apply_official_fix.py
+          python3 tools/generate.py
+          python3 tools/generate.py --check
+          python3 tests/test_installers.py
+          python3 tests/test_official_policy.py
+          shellcheck *.sh
+          rm tools/_apply_official_fix.py
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add templates versions.json '*.sh' '*.ps1' tests tools/_apply_official_fix.py
+          git commit -m 'fix: follow Pi installation policy and check platform prerequisites'
+          python3 - <<'PY'
+          from pathlib import Path
+          import re, subprocess
+          path = Path('tools/generate_menus.py')
+          revision = subprocess.check_output(['git','rev-parse','HEAD'], text=True).strip()
+          text, count = re.subn(r"revision='[0-9a-f]{40}'", f"revision='{revision}'", path.read_text())
+          assert count == 1
+          path.write_text(text)
+          PY
+          python3 tools/generate_menus.py
+          python3 tools/generate_menus.py --check
+          git add tools/generate_menus.py menu.sh menu.ps1
+          git commit -m 'fix: pin tool menus to corrected installers'
+          git push origin HEAD:codex/official-installers-20260920

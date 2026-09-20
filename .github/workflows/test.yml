@@ -15,6 +15,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
         with:
           node-version: 24.21.0
@@ -29,19 +31,35 @@ jobs:
           if ($errors.Count) { throw ($errors | Out-String) }
           ./menu.ps1 -Help
       - run: python tools/generate.py --check
+      - run: python tools/generate_menus.py --check
       - name: Shell fault-injection tests
         if: runner.os != 'Windows'
-        run: python3 tests/test_installers.py
+        run: |
+          python3 tests/test_installers.py
+          python3 tests/test_official_policy.py
       - name: ShellCheck
         if: runner.os == 'Linux'
         run: shellcheck *.sh
       - name: PowerShell checks
         shell: pwsh
-        run: ./tests/test-powershell.ps1
+        run: |
+          ./tests/test-powershell.ps1
+          ./tests/test-official-policy.ps1
       - name: Windows PowerShell 5.1 checks
         if: runner.os == 'Windows'
         shell: powershell
-        run: .\tests\test-powershell.ps1
+        run: |
+          .\tests\test-powershell.ps1
+          .\tests\test-official-policy.ps1
+      - name: Install real Pi on Unix with lifecycle scripts disabled
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          export PI_CODING_AGENT_DIR="$RUNNER_TEMP/pi-profile"
+          npm_config_ignore_scripts=true bash pi.sh --root "$RUNNER_TEMP/lmm clients" --no-path --network official
+          "$RUNNER_TEMP/lmm clients/bin/pi" --version
+          "$RUNNER_TEMP/lmm clients/bin/pi" list
+          bash pi.sh --root "$RUNNER_TEMP/lmm clients" --check
       - name: Install real CLI on Unix
         if: runner.os != 'Windows'
         shell: bash
