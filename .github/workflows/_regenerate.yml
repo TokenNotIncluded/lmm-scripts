@@ -1,0 +1,46 @@
+name: Verify legacy Bash loader
+on:
+  push:
+    branches: [codex/official-installers-20260920]
+    paths: [templates/load.sh.in, .github/workflows/_regenerate.yml]
+permissions:
+  contents: write
+jobs:
+  regenerate:
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: 24.21.0
+      - name: Generate and test on the system Bash
+        shell: bash
+        run: |
+          /bin/bash --version
+          python3 tools/generate.py
+          python3 tools/generate.py --check
+          python3 tests/test_installers.py
+          python3 tests/test_official_policy.py
+          python3 tests/test_library_loader.py
+          pwsh -NoProfile -File tests/test-library-loader.ps1
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add pi.sh dsh.sh lmm.sh
+          git commit -m 'fix: support buffered library imports on macOS Bash 3.2'
+          python3 - <<'PY'
+          from pathlib import Path
+          import re, subprocess
+          p=Path('tools/generate_menus.py')
+          revision=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+          text,count=re.subn(r"revision='[0-9a-f]{40}'",f"revision='{revision}'",p.read_text(encoding='utf-8'))
+          assert count==1
+          p.write_text(text,encoding='utf-8')
+          PY
+          python3 tools/generate_menus.py
+          python3 tools/generate_menus.py --check
+          git add tools/generate_menus.py menu.sh menu.ps1
+          git commit -m 'fix: pin menus to Bash-compatible library loaders'
+          git push origin HEAD:codex/official-installers-20260920
