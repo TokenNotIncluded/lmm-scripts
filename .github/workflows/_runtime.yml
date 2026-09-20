@@ -1,0 +1,68 @@
+name: Prepare runtime library loaders
+on:
+  push:
+    branches: [codex/official-installers-20260920]
+    paths:
+      - tools/_runtime_refactor.py
+      - templates/load.*.in
+      - tests/test_library_loader.py
+      - tests/test-library-loader.ps1
+      - .github/workflows/_runtime.yml
+permissions:
+  contents: write
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: 24.21.0
+      - name: Apply changes, generate and test
+        run: |
+          python3 tools/_runtime_refactor.py
+          python3 tools/generate.py
+          python3 tools/generate.py --check
+          python3 tools/generate_menus.py --check
+          python3 tests/test_installers.py
+          python3 tests/test_official_policy.py
+          python3 tests/test_library_loader.py
+          shellcheck *.sh
+          pwsh -NoProfile -File tests/test-powershell.ps1
+          pwsh -NoProfile -File tests/test-library-loader.ps1
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+          before=after=0
+          for ext in ('sh','ps1'):
+              for target in ('pi','dsh','lmm'):
+                  name=f'{target}.{ext}'
+                  old=len(subprocess.check_output(['git','show',f'ce6aea96cd73d633424daaa6e2e25ac18fd33b5c:{name}']))
+                  new=Path(name).stat().st_size
+                  before+=old;after+=new
+                  print(f'{name}: {old} -> {new} bytes')
+          print(f'TOTAL: {before} -> {after}; reduction {(1-after/before)*100:.1f}%')
+          assert after < before * .7
+          PY
+          rm tools/_runtime_refactor.py
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'refactor: fetch pinned common libraries instead of embedding them'
+          python3 - <<'PY'
+          from pathlib import Path
+          import re, subprocess
+          p=Path('tools/generate_menus.py')
+          revision=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+          text,count=re.subn(r"revision='[0-9a-f]{40}'",f"revision='{revision}'",p.read_text(encoding='utf-8'))
+          assert count==1
+          p.write_text(text,encoding='utf-8')
+          PY
+          python3 tools/generate_menus.py
+          python3 tools/generate_menus.py --check
+          git add tools/generate_menus.py menu.sh menu.ps1
+          git commit -m 'fix: point menus at runtime-loading installers'
+          git push origin HEAD:codex/official-installers-20260920
