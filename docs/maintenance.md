@@ -31,7 +31,9 @@ pwsh -NoProfile -File tests/test-powershell.ps1
 pwsh -NoProfile -File tests/test-official-policy.ps1
 ```
 
-只修改模板和版本清单，再生成根目录脚本。公开脚本必须能独立运行；不要添加远程 `source` 依赖。
+公共函数放在 `templates/lib/`，Pi、DSH、LMM 的差异放在 `templates/tools/`。`tools/render.py` 负责共用的文本读取、完整管道包装和生成检查；`tools/generate.py` 只组装当前工具需要的代码、版本和哈希。菜单复用同一份根目录、哈希和 Termux 函数，`lmm-use.sh` 也从模板生成。
+
+只修改这些源文件和版本清单，再生成根目录脚本。`.sh` 与 `.ps1` 都保留单文件入口，不在运行时下载或 `source` 公共库；网站现有同步清单无需增加运行时文件。Windows/Linux/macOS 的编码和完整脚本校验保持不变。
 
 菜单的 `revision` 固定到含有目标脚本的提交，并按该提交计算 SHA-256。更新安装器后，先提交安装器，再更新 `tools/generate_menus.py` 中的 `revision` 并生成菜单，避免入口仍取旧代码。线上同步由网站仓库负责；源码提交和线上节点同步是两回事。
 

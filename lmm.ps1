@@ -12,48 +12,15 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $Target = 'lmm'
-$ScriptVersion = '2026.09.20.1'
-$NodeVersion = '24.21.0'
-$PiVersion = '0.85.1'
-$PiProviderVersion = '0.1.0-alpha.1'
-$PnpmVersion = '11.7.0'
-$DshVersion = '0.1.5-rc.2'
-$DshProviderUrl = 'https://github.com/TokenNotIncluded/dsh-lmm-provider/releases/download/v0.1.0-alpha.2/tokennotincluded-dsh-lmm-provider-0.1.0-alpha.2.tgz'
-$DshProviderSha256 = '609eba9f1516cadf7086e44d290752d1361ac607eb1d1cb5682abfa5e806304d'
+$ScriptVersion = '2026.09.20.2'
 $LmmVersion = '0.1.0'
 $LmmReleaseBase = 'https://github.com/TokenNotIncluded/api.lmm.best/releases/download/lmm-cli-v0.1.0'
-$NodeHashes = @{
-  'linux-x64' = '6e1db87ef58b8819e5d5402eff1536491b18edd8eb7bee5ef7897876e88dc5ff'
-  'linux-arm64' = '724282c3b43aec998aa9527380465b45d229e021b58035f5f4f63095eabfe5d5'
-  'darwin-x64' = '1462cb3b3046b815cf8ea436d3da450ec1a9f11dac7e5a46b0ada5305d7e8097'
-  'darwin-arm64' = 'bed7eea5325e1108f32ce5228ddd6a5f0f08a499ee42aa7442aea583702f6057'
-  'win-x64' = '158f7685b44de51f6c0df1d153526cbcd3e1bc739a8dfc607721cef75de9e541'
-  'win-arm64' = '8779b1bde1d39f8d420e3b57aa657b39891af434d3de44a919044cec06785921'
-}
 $LmmHashes = @{
   'linux-x64' = '292a1ff8b599466f52747867a0b14bd14860faefaa085cc60746040cd7eba9b7'
   'darwin-arm64' = '8f6b3a2d08500566b528b7089664420d3395e464c172e3a43dfcb73d37f57b3f'
   'win-x64' = 'd0eb3c3d3fe695eaa8a85de7c3161d0f7f17153064db5c20b8ced09defc574a9'
 }
 
-$script:InstalledSuccess=$false
-$script:Stage = $null; $script:LockHandle = $null; $script:Phase = 'arguments'
-$Retries=3; $ConnectTimeout=10; $StallTimeout=20; $DownloadTimeout=600; $CommandTimeout=1800; $MinSpeed=16384
-$script:Cache=$null
-$script:PnpmBin=$null
-$script:Client = $null; $script:NodeBin = $null; $script:NpmSelected = $false
-function Write-Log([string]$Message) { Write-Host "[lmm $Target] $Message" }
-function Stop-Setup([string]$Message) { throw $Message }
-function Show-Usage {
-  Write-Host @"
-LMM $Target installer $ScriptVersion
-Usage: .\$Target.ps1 [-Check] [-Update] [-Root PATH] [-Network auto|official|china]
-                    [-Profile web|headless] [-AddPath] [-NoPath] [-NoInstallNode]
-                    [-FromSource] [-Launch] [-Help]
-No automatic login or PATH changes. Pi on Windows requires Bash.
--FromSource is for the LMM CLI and requires existing Rust 1.88+ and build tools.
-"@
-}
 function Setting([string]$Name, [int]$Default, [int]$Maximum) {
     $raw = [Environment]::GetEnvironmentVariable($Name)
     if ([string]::IsNullOrEmpty($raw)) { return $Default }
@@ -146,36 +113,6 @@ function Invoke-Native([string]$Command, [string[]]$Arguments) {
   Invoke-Bounded $Command $Arguments
 }
 function Get-Hash([string]$Path) { return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant() }
-function Test-Node {
-  $node = Get-Command node.exe -ErrorAction SilentlyContinue
-  $npm = Get-Command npm.cmd -ErrorAction SilentlyContinue
-  if (-not $node -or -not $npm) { return $false }
-  try { $versionText=(& $node.Source --version 2>$null | Out-String).Trim() } catch { return $false }
-  if ($LASTEXITCODE -ne 0 -or $versionText -notmatch '^v([0-9]+)\.([0-9]+)\.[0-9]+') { return $false }
-  $major=[int]$Matches[1];$minor=[int]$Matches[2]
-  return (($major -eq 22 -and $minor -ge 19) -or $major -ge 24)
-}
-function Assert-PiShell {
-  # Follow Pi's shellPath -> Git Bash -> PATH lookup, without editing settings.
-  $agentDirectory=$env:PI_CODING_AGENT_DIR
-  if (!$agentDirectory) { $agentDirectory=Join-Path ([Environment]::GetFolderPath('UserProfile')) '.pi\agent' }
-  $settingsPath=Join-Path $agentDirectory 'settings.json'
-  if (Test-Path -LiteralPath $settingsPath) {
-    try { $settings=Get-Content -LiteralPath $settingsPath -Raw -Encoding UTF8 | ConvertFrom-Json }
-    catch { throw "Invalid Pi settings: $settingsPath. Repair the JSON before installing." }
-    if ($null -eq $settings) { throw "Invalid Pi settings: $settingsPath" }
-    $property=$settings.PSObject.Properties['shellPath']
-    if ($property -and $property.Value) {
-      $shell=[string]$property.Value
-      if (Test-Path -LiteralPath $shell -PathType Leaf) { return }
-      if (Get-Command $shell -CommandType Application -ErrorAction SilentlyContinue) { return }
-      throw "Pi shellPath does not exist: $shell. Correct it in $settingsPath."
-    }
-  }
-  if ($env:ProgramFiles -and (Test-Path -LiteralPath (Join-Path $env:ProgramFiles 'Git\bin\bash.exe') -PathType Leaf)) { return }
-  if (Get-Command 'bash.exe' -CommandType Application -ErrorAction SilentlyContinue) { return }
-  throw 'Pi requires Bash on Windows. Install Git for Windows, reopen PowerShell, or set shellPath in Pi settings. See https://pi.dev/docs/latest/windows'
-}
 function Set-RequestProxy($request) {
             $proxyValue = if ($env:HTTPS_PROXY) { $env:HTTPS_PROXY } else { $env:HTTP_PROXY }
             if ($proxyValue) {
@@ -284,90 +221,6 @@ function Get-VerifiedFile([string]$Url, [string]$Destination, [string]$Expected)
   }
   throw 'All download sources failed. Retry -Network official or -Network china; inspect your proxy/CA settings.'
 }
-function Install-Node {
-  $script:Phase = 'Node.js runtime'
-  if (Test-Node) { $script:NodeBin = Split-Path (Get-Command node.exe).Source; return }
-  $directory = Join-Path $Root "runtime\node-v$NodeVersion-$Platform"
-  if (Test-Path -LiteralPath (Join-Path $directory 'node.exe')) { $env:PATH = "$directory;$env:PATH" }
-  if (Test-Node) { $script:NodeBin = $directory; return }
-  if ($NoInstallNode -or $NoBootstrap) { throw 'Need Node 22.19+ (22.x) or Node 24+, including npm.' }
-  $hash = $NodeHashes[$Platform]
-  if (-not $hash) { throw "No verified Node archive for $Platform" }
-  $name = "node-v$NodeVersion-$Platform.zip"; $archive = Join-Path $script:Cache $name
-  Get-VerifiedFile "https://nodejs.org/dist/v$NodeVersion/$name" $archive $hash
-  $unpack = Join-Path $script:Stage 'runtime'; Expand-Archive -LiteralPath $archive -DestinationPath $unpack
-  $extracted = Join-Path $unpack "node-v$NodeVersion-$Platform"
-  Invoke-Native (Join-Path $extracted 'node.exe') @('--version')
-  if (Test-Path -LiteralPath $directory) { throw "Managed runtime is present but unusable; inspect $directory before replacing." }
-  Move-Item -LiteralPath $extracted -Destination $directory
-  $script:NodeBin = $directory; $env:PATH = "$directory;$env:PATH"
-}
-function Set-NpmNetwork {
-  if (-not $env:npm_config_cache) { $cache=(& npm.cmd config get cache 2>$null | Out-String).Trim(); if ($cache) { $env:npm_config_cache=$cache } else { $env:npm_config_cache=Join-Path $script:Cache 'npm' } }
-  $env:npm_config_fetch_retries=[string]$Retries; $env:npm_config_fetch_timeout=[string]($StallTimeout*1000); $env:npm_config_fetch_retry_mintimeout='2000'; $env:npm_config_fetch_retry_maxtimeout='30000'; $env:npm_config_strict_ssl='true'; $env:npm_config_prefer_offline='true'
-  if ($env:LMM_NPM_REGISTRY) { $env:npm_config_registry=$env:LMM_NPM_REGISTRY }
-  $current = (& npm.cmd config get registry 2>$null | Out-String).Trim()
-  if ($env:npm_config_registry -or ($current -and $current -ne 'https://registry.npmjs.org/')) { Write-Log 'Keeping your existing npm registry/proxy configuration.'; return }
-  $script:NpmSelected = $true
-  if ($Network -eq 'china') { $env:npm_config_registry='https://registry.npmmirror.com/' }
-  elseif ($Network -eq 'official') { $env:npm_config_registry='https://registry.npmjs.org/' }
-  else { $env:npm_config_registry = @(Get-RankedUrls @('https://registry.npmjs.org/','https://registry.npmmirror.com/'))[0] }
-  Write-Log 'Registry selection affects this process only, not your global npm configuration.'
-}
-function Invoke-WithRegistryRetry([string]$Command,[string[]]$Arguments) {
-  try { Invoke-Native $Command $Arguments } catch {
-    if ($Network -ne 'auto' -or -not $script:NpmSelected) { throw }
-    if ($env:npm_config_registry -eq 'https://registry.npmjs.org/') { $env:npm_config_registry='https://registry.npmmirror.com/' } else { $env:npm_config_registry='https://registry.npmjs.org/' }
-    Write-Log 'Retrying with the alternate registry and the same cache.'
-    Invoke-Native $Command $Arguments
-  }
-}
-function Install-Pnpm {
-  $script:Phase='DSH package manager';$destination=Join-Path $Root "tools\pnpm\$PnpmVersion"
-  if ((Test-Path -LiteralPath (Join-Path $destination 'pnpm.cmd')) -and (Test-Path -LiteralPath (Join-Path $destination '.lmm-managed'))) { $script:PnpmBin=$destination }
-  elseif ($NoBootstrap) {
-    $pm=Get-Command pnpm.cmd -ErrorAction SilentlyContinue
-    if (!$pm) { throw 'pnpm is missing; rerun without -NoBootstrap.' }
-    Invoke-Native $pm.Source @('--version');$script:PnpmBin=Split-Path $pm.Source
-  } else {
-    $work=Join-Path $script:Stage 'pnpm';New-Item -ItemType Directory -Path $work | Out-Null
-    Invoke-WithRegistryRetry (Get-Command npm.cmd).Source @('install','--global','--prefix',$work,'--ignore-scripts','--no-audit','--no-fund',"pnpm@$PnpmVersion")
-    Invoke-Native (Join-Path $work 'pnpm.cmd') @('--version')
-    Set-Content -LiteralPath (Join-Path $work '.lmm-managed') -Value $PnpmVersion
-    New-Item -ItemType Directory -Path (Split-Path $destination) -Force | Out-Null
-    if (Test-Path -LiteralPath $destination) {
-      if (!(Test-Path -LiteralPath (Join-Path $destination '.lmm-managed'))) { throw 'Unowned pnpm installation directory.' }
-      $destination+='-reinstall-'+[Guid]::NewGuid().ToString('N')
-    }
-    Move-Item -LiteralPath $work -Destination $destination;$script:PnpmBin=$destination
-  }
-  $env:PATH="$script:PnpmBin;$env:PATH"
-}
-function Install-Client([string]$Package,[string]$Version,[string]$Entry) {
-  $script:Phase="$Target client"; $destination=Join-Path $Root "apps\$Target\$Version"
-  if (-not $Update -and (Test-Path -LiteralPath (Join-Path $destination "$Entry.cmd")) -and (Test-Path -LiteralPath (Join-Path $destination '.lmm-managed')) -and (Get-Content -LiteralPath (Join-Path $destination '.lmm-managed') -Raw).Trim() -eq "$Version|$ScriptVersion") { $script:Client=Join-Path $destination "$Entry.cmd"; return }
-  if ($NoBootstrap) { throw 'Managed client is missing. Rerun without -NoBootstrap.' }
-  $work=Join-Path $script:Stage 'client'; New-Item -ItemType Directory -Path $work | Out-Null
-  $installArgs=@('install','--global','--prefix',$work,'--no-audit','--no-fund',"$Package@$Version")
-  if ($Target -eq 'pi') {
-    # https://pi.dev/docs/latest/quickstart: Pi ships a prebuilt CLI.
-    $installArgs+=@('--ignore-scripts')
-  } else {
-    $allow='@deepseek-ai/dsh-subprocess-local,koffi,node-pty,@google/genai,protobufjs'
-    $npmHelp=(& npm.cmd install --help 2>$null | Out-String)
-    if ($npmHelp.Contains('--allow-scripts')) { $installArgs+=@("--allow-scripts=$allow") }
-    if ((& npm.cmd config get ignore-scripts 2>$null | Out-String).Trim() -eq 'true') { throw 'DSH needs native build scripts. Review your package-specific build policy; ignore-scripts=true will not be overridden.' }
-  }
-  Invoke-WithRegistryRetry (Get-Command npm.cmd).Source $installArgs
-  Invoke-Native (Join-Path $work "$Entry.cmd") @('--version')
-  Set-Content -LiteralPath (Join-Path $work '.lmm-managed') -Value "$Version|$ScriptVersion"
-  New-Item -ItemType Directory -Path (Split-Path $destination) -Force | Out-Null
-  if (Test-Path -LiteralPath $destination) {
-    if (!(Test-Path -LiteralPath (Join-Path $destination '.lmm-managed'))) { throw "Refusing unowned directory: $destination" }
-    $destination += '-reinstall-' + [Guid]::NewGuid().ToString('N')
-  }
-  Move-Item -LiteralPath $work -Destination $destination; $script:Client=Join-Path $destination "$Entry.cmd"
-}
 function Install-Lmm {
   $script:Phase='LMM CLI'; $destination=Join-Path $Root "apps\lmm\$LmmVersion-$Platform"
   if (-not $Update -and (Test-Path -LiteralPath (Join-Path $destination 'lmm.exe')) -and (Test-Path -LiteralPath (Join-Path $destination '.lmm-managed'))) { $script:Client=Join-Path $destination 'lmm.exe'; return }
@@ -394,6 +247,26 @@ function Install-Lmm {
     $destination += '-reinstall-' + [Guid]::NewGuid().ToString('N')
   }
   Move-Item -LiteralPath $work -Destination $destination; $script:Client=Join-Path $destination 'lmm.exe'
+}
+function Install-Tool { Install-Lmm }
+
+$script:InstalledSuccess=$false
+$script:Stage = $null; $script:LockHandle = $null; $script:Phase = 'arguments'
+$Retries=3; $ConnectTimeout=10; $StallTimeout=20; $DownloadTimeout=600; $CommandTimeout=1800; $MinSpeed=16384
+$script:Cache=$null
+$script:PnpmBin=$null
+$script:Client = $null; $script:NodeBin = $null; $script:NpmSelected = $false
+function Write-Log([string]$Message) { Write-Host "[lmm $Target] $Message" }
+function Stop-Setup([string]$Message) { throw $Message }
+function Show-Usage {
+  Write-Host @"
+LMM $Target installer $ScriptVersion
+Usage: .\$Target.ps1 [-Check] [-Update] [-Root PATH] [-Network auto|official|china]
+                    [-Profile web|headless] [-AddPath] [-NoPath] [-NoInstallNode]
+                    [-FromSource] [-Launch] [-Help]
+No automatic login or PATH changes. Pi on Windows requires Bash.
+-FromSource is for the LMM CLI and requires existing Rust 1.88+ and build tools.
+"@
 }
 function Write-Launcher {
   $destination=Join-Path $Root "bin\$Target.cmd"
@@ -462,42 +335,7 @@ function Invoke-LmmSetup {
   } catch { throw 'Another LMM installer is running. Wait for it to finish.' }
   try {
     $script:Stage=Join-Path $Root ('.setup-'+[Guid]::NewGuid().ToString('N')); New-Item -ItemType Directory -Path $script:Stage | Out-Null
-    if ($Target -eq 'lmm') { Install-Lmm }
-    else {
-      Install-Node; Set-NpmNetwork
-      if ($Target -eq 'pi') {
-        Install-Client '@earendil-works/pi-coding-agent' $PiVersion 'pi'
-        $script:Phase='Pi LMM provider'; Invoke-WithRegistryRetry $script:Client @('install',"npm:@tokennotincluded/pi-lmm-provider@$PiProviderVersion")
-      } else {
-        Install-Pnpm
-        Install-Client '@deepseek-ai/dsh' $DshVersion 'dsh'
-        $script:Phase='DSH LMM provider'; $archive=Join-Path $script:Cache ($DshProviderUrl.Split('/')[-1])
-        Get-VerifiedFile $DshProviderUrl $archive $DshProviderSha256
-        # DSH 0.1.5 uses a shell to invoke pnpm on Windows. Passing absolute
-        # paths containing spaces loses argument boundaries in that layer.
-        # Keep the verified immutable package inside the profile and pass a
-        # path-free file: spec; configure the store through environment instead.
-        $profileHome=$env:DSH_HOME
-        $userDirectory=[Environment]::GetFolderPath('UserProfile')
-        if (!$profileHome) { $profileHome=Join-Path $userDirectory '.dsh' }
-        elseif ($profileHome -eq '~') { $profileHome=$userDirectory }
-        elseif ($profileHome.StartsWith('~/') -or $profileHome.StartsWith('~\')) { $profileHome=Join-Path $userDirectory $profileHome.Substring(2) }
-        if (![IO.Path]::IsPathRooted($profileHome)) { $profileHome=Join-Path (Get-Location).ProviderPath $profileHome }
-        $profileDirectory=Join-Path ([IO.Path]::GetFullPath($profileHome)) "profiles\$Profile"
-        New-Item -ItemType Directory -Path $profileDirectory -Force | Out-Null
-        $packageName='.lmm-provider-'+$DshProviderSha256.Substring(0,16)+'.tgz'
-        $profilePackage=Join-Path $profileDirectory $packageName
-        if (Test-Path -LiteralPath $profilePackage) {
-          if ((Get-Hash $profilePackage) -ne $DshProviderSha256) { throw 'Conflicting installer package in the DSH profile; inspect it before retrying.' }
-        } else {
-          $pending=Join-Path $profileDirectory ('.lmm-package-'+[Guid]::NewGuid().ToString('N')+'.tmp')
-          try { Copy-Item -LiteralPath $archive -Destination $pending; Move-Item -LiteralPath $pending -Destination $profilePackage -Force }
-          finally { if (Test-Path -LiteralPath $pending) { Remove-Item -LiteralPath $pending -Force } }
-        }
-        $env:npm_config_store_dir=Join-Path $script:Cache 'pnpm'
-        Invoke-WithRegistryRetry $script:Client @('plugin','--profile',$Profile,'add',"file:$packageName",'--ignore-scripts')
-      }
-    }
+    Install-Tool
     $script:Phase='launcher and PATH'; Write-Launcher; $script:InstalledSuccess=$true
     Write-Log "Ready: $(Join-Path $Root "bin\$Target.cmd")"
     Write-Log 'Use the full path above. With -AddPath, new terminals can use the short command.'

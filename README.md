@@ -34,6 +34,21 @@ DSH 插件按 profile 安装，默认 `web`。使用 `headless` 前，先在相�
 
 LMM CLI 的实际软件安装、接入、恢复尚未完成；`lmm setup pi --dry-run` 仅预览。`doctor` / `setup --dry-run` 返回 3 时不代表全部成功。Linux 登录需要可用的 Secret Service；SSH 或容器中不一定具备。
 
+## Termux（原生 Android）
+
+先准备 Termux 自己的依赖，不使用桌面 Linux 的 Node 压缩包：
+
+```sh
+pkg install bash curl coreutils nodejs npm git
+curl -fsSL https://api.lmm.best/scripts/menu.sh | bash
+```
+
+安装目录保持在 `$HOME`。脚本检查 Node 是否为 Android 版本；拒绝把安装、缓存或临时目录放在 `/sdcard`、`/storage`，包括指向共享存储的链接。未设置 `TMPDIR` 时使用 `$PREFIX/tmp`，启动器使用当前 Bash 的绝对路径和明确的 Node 入口。
+
+文本剪贴板另需 Termux:API 应用和 `pkg install termux-api`，不作为安装的强制条件。浏览器没有自动打开时，可手动用 `termux-open-url` 打开登录地址。脚本不申请存储权限、不清空缓存、不执行系统升级。
+
+Pi 的安装方式遵循官方 Termux 文档。DSH 的 Android 原生依赖、LMM CLI 的 Android 源码构建尚未经真机验证；LMM CLI 没有 Android 预编译包。不要把环境模拟测试当成真机验证。
+
 ## 直接运行与更新
 
 ```sh

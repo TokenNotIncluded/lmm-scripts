@@ -6,10 +6,15 @@ import sys,os,json,shutil
 from pathlib import Path
 name=Path(sys.argv[0]).name;a=sys.argv[1:]
 with open(os.environ['LMM_TEST_LOG'],'a') as f:f.write(json.dumps([name,a])+'\n')
-if name=='uname':print('Linux' if '-s' in a else 'x86_64')
+if name=='uname':print(os.environ.get('LMM_TEST_OS','Linux') if '-s' in a else os.environ.get('LMM_TEST_ARCH','x86_64'))
+elif name=='realpath':print(os.path.realpath(a[-1]))
 elif name=='node':
  if a and a[0]=='-':os.execv(os.environ['LMM_TEST_REAL_NODE'],[os.environ['LMM_TEST_REAL_NODE']]+a)
- if '-e' in a:sys.exit(0 if os.environ.get('LMM_TEST_NODE_OK','1')=='1' else 1)
+ if '-e' in a:
+  ok=os.environ.get('LMM_TEST_NODE_OK','1')=='1'
+  if a[-1]=='android':ok=ok and os.environ.get('LMM_TEST_NODE_PLATFORM','android')=='android'
+  sys.exit(0 if ok else 1)
+ if a and Path(a[0]).is_file():os.execv('/bin/bash',['bash',a[0]]+a[1:])
  print('v24.21.0')
 elif name=='curl':
  if '-ILs' in a:
@@ -37,7 +42,7 @@ else:sys.exit(4)
 class InstallerTests(unittest.TestCase):
  def setUp(self):
   self.tmp=tempfile.TemporaryDirectory();self.base=Path(self.tmp.name);self.root=self.base/"install space's path";self.bin=self.base/'fake';self.bin.mkdir();self.log=self.base/'calls.jsonl';self.log.write_text('')
-  for name in ['curl','uname','node','npm']:
+  for name in ['curl','uname','node','npm','realpath']:
    f=self.bin/name;f.write_text(FAKE);f.chmod(0o755)
   self.archive=self.base/'fixture.tar.gz'
   with tarfile.open(self.archive,'w:gz') as t:

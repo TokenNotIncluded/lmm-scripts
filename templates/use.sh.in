@@ -1,10 +1,6 @@
 #!/usr/bin/env bash
-lmm_use_main() {
 set -euo pipefail
-lmm_root() {
-  printf '%s\n' "${LMM_INSTALL_ROOT:-${XDG_DATA_HOME:-$HOME/.local/share}/lmm-tools}"
-}
-
+@@LIBRARIES@@
 ROOT=$(lmm_root)
 usage() {
   cat <<'HELP'
@@ -39,8 +35,3 @@ case "$command" in
     else printf 'Authentication requires an interactive terminal. Run lmm %s locally.\n' "$command" >&2; exit 2; fi;;
   *) printf 'Unsupported quick-start command: %s\n' "$command" >&2; usage; exit 2;;
 esac
-
-}
-if true; then
-  lmm_use_main "$@"
-fi

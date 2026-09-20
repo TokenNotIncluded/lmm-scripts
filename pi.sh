@@ -1,19 +1,13 @@
 #!/usr/bin/env bash
 lmm_install_main() {
-# Generated from templates/install.sh.in and versions.json. No sudo, no API keys.
+# Generated from templates/ and versions.json. Edit the source, not this file.
 set -euo pipefail
 set +x
 TARGET=pi
-SCRIPT_VERSION=2026.09.20.1
+SCRIPT_VERSION=2026.09.20.2
 NODE_VERSION=24.21.0
 PI_VERSION=0.85.1
 PI_PROVIDER_VERSION=0.1.0-alpha.1
-PNPM_VERSION=11.7.0
-DSH_VERSION=0.1.5-rc.2
-DSH_PROVIDER_URL=https://github.com/TokenNotIncluded/dsh-lmm-provider/releases/download/v0.1.0-alpha.2/tokennotincluded-dsh-lmm-provider-0.1.0-alpha.2.tgz
-DSH_PROVIDER_SHA256=609eba9f1516cadf7086e44d290752d1361ac607eb1d1cb5682abfa5e806304d
-LMM_VERSION=0.1.0
-LMM_RELEASE_BASE=https://github.com/TokenNotIncluded/api.lmm.best/releases/download/lmm-cli-v0.1.0
 node_hash() { case "$1" in
   linux-x64) printf '%s\n' 6e1db87ef58b8819e5d5402eff1536491b18edd8eb7bee5ef7897876e88dc5ff;;
   linux-arm64) printf '%s\n' 724282c3b43aec998aa9527380465b45d229e021b58035f5f4f63095eabfe5d5;;
@@ -23,144 +17,42 @@ node_hash() { case "$1" in
   win-arm64) printf '%s\n' 8779b1bde1d39f8d420e3b57aa657b39891af434d3de44a919044cec06785921;;
   *) printf '\n';;
 esac; }
-lmm_hash() { case "$1" in
-  linux-x64) printf '%s\n' 292a1ff8b599466f52747867a0b14bd14860faefaa085cc60746040cd7eba9b7;;
-  darwin-arm64) printf '%s\n' 8f6b3a2d08500566b528b7089664420d3395e464c172e3a43dfcb73d37f57b3f;;
-  win-x64) printf '%s\n' d0eb3c3d3fe695eaa8a85de7c3161d0f7f17153064db5c20b8ced09defc574a9;;
-  *) printf '\n';;
-esac; }
 
-ROOT=${LMM_INSTALL_ROOT:-${XDG_DATA_HOME:-$HOME/.local/share}/lmm-tools}
-NETWORK=auto PROFILE=web CHECK=0 FORCE=0 LAUNCH=0 ADD_PATH=0 SOURCE=0 INSTALL_NODE=1
-STAGE='' LOCKED=0 PHASE=arguments BOOTSTRAP=1
-RUN_ARGS=()
-NPM_SELECTED=0
-PNPM_BIN=''
-log() { printf '[lmm %s] %s\n' "$TARGET" "$*" >&2; }
-fail() { log "ERROR: $*"; exit 1; }
-usage() {
-  cat <<USAGE
-LMM $TARGET installer $SCRIPT_VERSION
-Usage: bash $TARGET.sh [options] [-- launch arguments]
-  --check              Read-only environment/installation check
-  --update             Reinstall the versions pinned in versions.json
-  --root PATH          User-owned install directory (default: $ROOT)
-  --network MODE       auto (latency probes), official, or china
-  --profile NAME       DSH: web or headless (default: web)
-  --no-install-node    Require an existing compatible Node/npm
-  --add-path           Opt in to adding a backed-up shell PATH entry
-  --no-path            Keep startup files unchanged (default)
-  --install-only       Compatibility alias: do not launch
-  --no-bootstrap       Require existing compatible Node and managed client
-  --from-source        LMM CLI: build the pinned crate using existing Rust 1.88+
-  --launch             Start the installed tool (DSH starts the chosen profile)
-  --help               Show this help
-No automatic login or PATH changes. Versions and platform notes: README.md.
-USAGE
+lmm_root() {
+  printf '%s\n' "${LMM_INSTALL_ROOT:-${XDG_DATA_HOME:-$HOME/.local/share}/lmm-tools}"
 }
-while [ "$#" -gt 0 ]; do
-  case "$1" in
-    --help|-h) usage; exit 0;;
-    --check) CHECK=1;; --update) FORCE=1;; --launch) LAUNCH=1;;
-    --add-path) ADD_PATH=1;; --no-path) ADD_PATH=0;; --install-only) LAUNCH=0;; --no-bootstrap) INSTALL_NODE=0; BOOTSTRAP=0;; --from-source) SOURCE=1;; --no-install-node) INSTALL_NODE=0;;
-    --root|--network|--profile)
-      if [ "$#" -lt 2 ] || [ -z "${2:-}" ]; then fail "$1 requires a value"; fi
-      case "$1" in --root) ROOT=$2;; --network) NETWORK=$2;; --profile) PROFILE=$2;; esac; shift;;
-    --) shift; RUN_ARGS=("$@"); break;;
-    *) fail "Unknown option: $1 (use --help)";;
-  esac
-  shift
-done
-RETRIES=${LMM_RETRIES:-3}
-CONNECT_TIMEOUT=${LMM_CONNECT_TIMEOUT:-10}
-STALL_TIMEOUT=${LMM_STALL_TIMEOUT:-20}
-DOWNLOAD_TIMEOUT=${LMM_DOWNLOAD_TIMEOUT:-600}
-COMMAND_TIMEOUT=${LMM_COMMAND_TIMEOUT:-1800}
-MIN_SPEED=${LMM_MIN_SPEED_BYTES:-16384}
-for setting in "$RETRIES" "$CONNECT_TIMEOUT" "$STALL_TIMEOUT" "$DOWNLOAD_TIMEOUT" "$COMMAND_TIMEOUT" "$MIN_SPEED"; do
-  [[ $setting =~ ^[1-9][0-9]*$ && ${#setting} -le 8 ]] || fail 'Timeouts, retry counts and minimum speed must be positive integers.'
-done
-((RETRIES <= 10 && CONNECT_TIMEOUT <= 300 && STALL_TIMEOUT <= 86400 && DOWNLOAD_TIMEOUT <= 86400 && COMMAND_TIMEOUT <= 86400 && MIN_SPEED <= 10485760)) || fail 'Network setting exceeds supported limits.'
-CACHE=${LMM_CACHE_ROOT:-$ROOT/cache}
-case "$CACHE" in /*) ;; *) fail 'LMM_CACHE_ROOT must be an absolute path';; esac
-if [ "$CACHE" = / ] || [ -L "$ROOT" ] || [ -L "$CACHE" ]; then fail 'Refusing root or symlink installation/cache paths.'; fi
-for custom in "${LMM_NODE_BASE_URL:-}" "${LMM_NPM_REGISTRY:-}"; do
-  if [ -n "$custom" ]; then case "$custom" in https://*) ;; *) fail 'Custom mirrors must use HTTPS';; esac
-    case "$custom" in *'@'*|*$'\n'*|*$'\r'*) fail 'Custom mirrors must not contain embedded credentials or newlines';; esac
-  fi
-done
-case "$NETWORK" in auto|official|china) ;; *) fail 'network must be auto, official or china';; esac
-case "$PROFILE" in web|headless) ;; *) fail 'profile must be web or headless';; esac
-[ "$TARGET" = lmm ] || [ "$SOURCE" = 0 ] || fail '--from-source is only for lmm'
-case "$ROOT" in *$'\n'*|*$'\r'*) fail 'Install path must not contain newlines';; /*) ;; *) ROOT="$PWD/$ROOT";; esac
-if [ "$ROOT" = / ] || [ "$ROOT" = "$HOME" ]; then fail 'Choose a dedicated installation directory'; fi
-case "$(uname -s)" in Linux) OS=linux;; Darwin) OS=darwin;; *) fail 'This script supports Linux/macOS. On Windows use the .ps1 script.';; esac
-case "$(uname -m)" in x86_64|amd64) ARCH=x64;; arm64|aarch64) ARCH=arm64;; *) fail 'Unsupported CPU; use the documented source build on this platform.';; esac
-PLATFORM="$OS-$ARCH"
 sha256() {
-  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | awk '{print $1}'
-  elif command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | awk '{print $1}'
-  elif command -v openssl >/dev/null 2>&1; then openssl dgst -sha256 "$1" | awk '{print $NF}'
-  else fail 'Install a SHA-256 tool (sha256sum, shasum or openssl)'; fi
+  local digest
+  if command -v sha256sum >/dev/null 2>&1; then digest=$(sha256sum "$1") || return; printf '%s\n' "${digest%% *}"
+  elif command -v shasum >/dev/null 2>&1; then digest=$(shasum -a 256 "$1") || return; printf '%s\n' "${digest%% *}"
+  elif command -v openssl >/dev/null 2>&1; then digest=$(openssl dgst -sha256 "$1") || return; printf '%s\n' "${digest##* }"
+  else printf 'Install a SHA-256 tool.\n' >&2; return 1; fi
 }
-compatible_node() {
-  command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1 &&
-    node -e 'const [a,b]=process.versions.node.split(".").map(Number);process.exit((a===22&&b>=19)||a>=24?0:1)' >/dev/null 2>&1
+# Native Termux uses Android/bionic, not desktop Linux/glibc.
+lmm_is_termux() {
+  [ -n "${TERMUX_VERSION:-}${TERMUX_APP__PACKAGE_NAME:-}" ] ||
+    case "${PREFIX:-}" in */com.termux/files/usr) true;; *) false;; esac
 }
-# --check never creates directories, downloads, edits PATH or touches credentials.
-if [ "$CHECK" = 1 ]; then
-  log "Platform: $PLATFORM; install root: $ROOT"
-  if [ -x "$ROOT/bin/$TARGET" ]; then "$ROOT/bin/$TARGET" --version
-  elif command -v "$TARGET" >/dev/null 2>&1; then "$TARGET" --version
-  else log "$TARGET is not installed in this root or PATH"; exit 1; fi
-  if [ "$TARGET" != lmm ]; then
-    if compatible_node; then log 'Current PATH has compatible Node/npm.'
-    elif [ -x "$ROOT/runtime/node-v$NODE_VERSION-$PLATFORM/bin/node" ]; then log 'Managed Node runtime is available.'
-    else fail 'No compatible Node runtime found'; fi
-  fi
-  log 'Executable check complete; login and model access are not inferred.'
-  exit 0
-fi
-release_setup() {
-  if [ -n "$STAGE" ] && [ -d "$STAGE" ]; then rm -rf -- "$STAGE"; fi
-  STAGE=''
-  if [ "$LOCKED" = 1 ] && [ "$(cat "$ROOT/.setup-lock/pid" 2>/dev/null || true)" = "$$" ]; then
-    rm -f -- "$ROOT/.setup-lock/pid" "$ROOT/.setup-lock/owner"
-    rmdir "$ROOT/.setup-lock" 2>/dev/null || true
-  fi
-  LOCKED=0
+lmm_temp_root() {
+  if [ -n "${TMPDIR:-}" ]; then printf '%s\n' "$TMPDIR"
+  elif lmm_is_termux; then printf '%s/tmp\n' "${PREFIX:-$HOME/.cache/lmm-tools}"
+  else printf '/tmp\n'; fi
 }
-cleanup() {
-  rc=$?
-  trap - EXIT
-  release_setup
-  if [ "$rc" -ne 0 ]; then
-    log "Stopped during $PHASE. Existing launchers were preserved unless installation already completed."
-    log 'Check disk space, HTTPS proxy/CA settings, or retry --network official / --network china. Do not disable TLS validation.'
-  fi
-  exit "$rc"
+lmm_check_storage() {
+  lmm_is_termux || return 0
+  local resolved
+  # realpath -m also resolves missing paths and symlinked storage aliases.
+  command -v realpath >/dev/null 2>&1 || {
+    printf 'Termux needs coreutils: pkg install coreutils\n' >&2; return 1;
+  }
+  resolved=$(realpath -m -- "$1") || return 1
+  case "$resolved/" in
+    /sdcard/*|/storage/*|/mnt/sdcard/*|/mnt/media_rw/*|/mnt/runtime/*|/mnt/user/*|/mnt/pass_through/*)
+      printf 'Use Termux private storage under HOME, not shared storage: %s\n' "$1" >&2
+      return 1;;
+  esac
 }
-trap cleanup EXIT
-trap 'exit 130' INT
-trap 'exit 143' TERM
-umask 077
-mkdir -p "$ROOT" "$CACHE" "$ROOT/bin" "$ROOT/apps" "$ROOT/runtime"
-ROOT=$(cd "$ROOT" && pwd -P)
-if ! mkdir "$ROOT/.setup-lock" 2>/dev/null; then
-  oldpid=$(cat "$ROOT/.setup-lock/pid" 2>/dev/null || true)
-  case "$oldpid" in ''|*[!0-9]*) fail "Unknown lock at $ROOT/.setup-lock; inspect it before removing";; esac
-  if kill -0 "$oldpid" 2>/dev/null; then fail "Another installer is running (PID $oldpid)"; fi
-  [ "$(cat "$ROOT/.setup-lock/owner" 2>/dev/null || true)" = lmm-installer-v1 ] || fail 'Unknown lock owner'
-  rm -- "$ROOT/.setup-lock/pid" "$ROOT/.setup-lock/owner"
-  rmdir "$ROOT/.setup-lock" || fail 'Lock contains unexpected files; left it untouched'
-  mkdir "$ROOT/.setup-lock"
-fi
-printf '%s\n' "$$" > "$ROOT/.setup-lock/pid"
-printf '%s\n' lmm-installer-v1 > "$ROOT/.setup-lock/owner"
-LOCKED=1
-STAGE=$(mktemp -d "$ROOT/.setup.XXXXXX")
-# Probe only public, credential-free artifact URLs. Slow transfers are still
-# interrupted independently of the latency ranking below.
+quote_sh() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
 rank_urls() {
   local i=0 url response code elapsed probe_dir
   if ! command -v curl >/dev/null 2>&1; then for url in "$@"; do printf '%s\n' "$i"; i=$((i+1)); done; return; fi
@@ -176,7 +68,7 @@ rank_urls() {
     i=$((i+1))
   done
   wait
-  cat "$probe_dir"/* | sort -n -k1,1 -k2,2 | awk '{print $2}'
+  cat "$probe_dir"/* | sort -n -k1,1 -k2,2 | while read -r elapsed index; do printf '%s\n' "$index"; done
 }
 urls_for() {
   URLS=("$1")
@@ -220,13 +112,14 @@ download() {
   done
   fail "Download failed: ${destination##*/}. Rerun to resume, or choose another --network mode."
 }
+compatible_node() {
+  command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1 &&
+    node -e 'const [a,b]=process.versions.node.split(".").map(Number);process.exit(((a===22&&b>=19)||a>=24)&&(process.argv[1]!=="android"||process.platform==="android")?0:1)' "$OS" >/dev/null 2>&1
+}
 ensure_node() {
   PHASE='Node.js runtime'
   if compatible_node; then NODE_BIN=$(dirname "$(command -v node)"); log "Using Node $(node --version)"; return; fi
-  # Android uses bionic, not the glibc used by the Linux Node archives.
-  if [ -n "${TERMUX_VERSION:-}" ] || [[ ${PREFIX:-} == */com.termux/files/usr ]]; then
-    fail 'In Termux, install Node with: pkg install nodejs git termux-api; then rerun. Desktop Linux Node archives cannot run on Android.'
-  fi
+  [ "$OS" != android ] || fail 'In Termux, run pkg install nodejs npm git; desktop Node archives are incompatible.'
   local dir="$ROOT/runtime/node-v$NODE_VERSION-$PLATFORM" hash archive
   if [ -x "$dir/bin/node" ]; then export PATH="$dir/bin:$PATH"; fi
   if compatible_node; then NODE_BIN="$dir/bin"; return; fi
@@ -292,27 +185,6 @@ with_registry_retry() {
     bounded "$@"
   else fail 'Package installation failed. Check network/proxy settings or try another --network mode.'; fi
 }
-ensure_pnpm() {
-  PHASE='DSH package manager'
-  local directory="$ROOT/tools/pnpm/$PNPM_VERSION" work="$STAGE/pnpm"
-  if [ -x "$directory/bin/pnpm" ] && [ -f "$directory/.lmm-managed" ]; then PNPM_BIN="$directory/bin"
-  elif [ "$BOOTSTRAP" = 0 ]; then
-    command -v pnpm >/dev/null 2>&1 || fail 'pnpm is missing; rerun without --no-bootstrap.'
-    bounded pnpm --version
-    PNPM_BIN=$(dirname "$(command -v pnpm)")
-  else
-    mkdir -p "$work" "$(dirname "$directory")"
-    with_registry_retry npm install --global --prefix "$work" --ignore-scripts --no-audit --no-fund "pnpm@$PNPM_VERSION"
-    bounded "$work/bin/pnpm" --version
-    printf '%s\n' "$PNPM_VERSION" > "$work/.lmm-managed"
-    if [ -e "$directory" ]; then
-      [ -f "$directory/.lmm-managed" ] || fail "Unowned package-manager directory: $directory"
-      directory="$directory-reinstall-$(date +%s)-$$"
-    fi
-    mv -- "$work" "$directory"; PNPM_BIN="$directory/bin"
-  fi
-  export PATH="$PNPM_BIN:$PATH"
-}
 install_client() {
   local package=$1 version=$2 entry=$3 target="$ROOT/apps/$TARGET/$2" work="$STAGE/client" allow
   PHASE="$TARGET client"
@@ -329,7 +201,7 @@ install_client() {
     [ "$(npm config get ignore-scripts 2>/dev/null || true)" != true ] || fail 'DSH needs native build scripts. Review your package-specific build policy; this installer will not override ignore-scripts=true.'
   fi
   with_registry_retry npm "${INSTALL_ARGS[@]}"
-  "$work/bin/$entry" --version >/dev/null
+  node "$work/bin/$entry" --version >/dev/null
   printf '%s\n' "$version|$SCRIPT_VERSION" > "$work/.lmm-managed"
   mkdir -p "$(dirname "$target")"
   if [ -e "$target" ]; then
@@ -339,44 +211,165 @@ install_client() {
   mv -- "$work" "$target"
   CLIENT="$target/bin/$entry"
 }
-install_lmm() {
-  PHASE='LMM CLI'
-  local hash target="$ROOT/apps/lmm/$LMM_VERSION-$PLATFORM" archive
-  if [ "$FORCE" = 0 ] && [ -x "$target/lmm" ] && [ -f "$target/.lmm-managed" ]; then CLIENT="$target/lmm"; return; fi
-  mkdir -p "$STAGE/lmm"
-  if [ "$SOURCE" = 1 ]; then
-    command -v cargo >/dev/null 2>&1 || fail 'Source builds need Rust 1.88+ and OS build tools. Install them first, then rerun --from-source.'
-    log 'Building the pinned crate; Cargo reuses its existing dependency/build caches. This can take several minutes.'
-    export CARGO_HTTP_TIMEOUT="$STALL_TIMEOUT" CARGO_NET_RETRY="$RETRIES"
-    export CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-$CACHE/cargo-target}
-    cargo install lmm-cli --version "$LMM_VERSION" --locked --root "$STAGE/cargo" </dev/null
-    cp -- "$STAGE/cargo/bin/lmm" "$STAGE/lmm/lmm"
-  else
-    if [ -n "${TERMUX_VERSION:-}" ] || [[ ${PREFIX:-} == */com.termux/files/usr ]]; then
-      fail 'No Android LMM CLI binary is provided. The Linux archive is not compatible with Termux.'
-    fi
-    hash=$(lmm_hash "$PLATFORM")
-    [ -n "$hash" ] || fail "No prebuilt CLI for $PLATFORM yet. With Rust 1.88+ and build tools, use --from-source."
-    archive="$CACHE/lmm-v$LMM_VERSION-$PLATFORM.tar.gz"
-    download "$LMM_RELEASE_BASE/${archive##*/}" "$archive" "$hash"
-    tar -xzf "$archive" -C "$STAGE/lmm"
-  fi
-  chmod +x "$STAGE/lmm/lmm"
-  "$STAGE/lmm/lmm" --version >/dev/null || fail 'CLI cannot run here. Linux x64 preview binaries need glibc 2.39+; use --from-source on older Linux.'
-  printf '%s\n' "$LMM_VERSION" > "$STAGE/lmm/.lmm-managed"
-  mkdir -p "$(dirname "$target")"
-  if [ -e "$target" ]; then [ -f "$target/.lmm-managed" ] || fail "Unowned path: $target"; target="$target-reinstall-$(date +%s)-$$"; fi
-  mv -- "$STAGE/lmm" "$target"; CLIENT="$target/lmm"
+install_tool() {
+  ensure_node; configure_npm
+  install_client @earendil-works/pi-coding-agent "$PI_VERSION" pi
+  PHASE='Pi LMM provider'
+  with_registry_retry node "$CLIENT" install "npm:@tokennotincluded/pi-lmm-provider@$PI_PROVIDER_VERSION"
+  if [ "$OS" = android ]; then log 'Optional clipboard: install the Termux:API app and pkg install termux-api. Open login links with termux-open-url.'; fi
 }
-quote_sh() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
+
+ROOT=$(lmm_root)
+NETWORK=auto PROFILE=web CHECK=0 FORCE=0 LAUNCH=0 ADD_PATH=0 SOURCE=0
+STAGE='' LOCKED=0 PHASE=arguments
+RUN_ARGS=()
+INSTALL_NODE=1 BOOTSTRAP=1 NPM_SELECTED=0
+PNPM_BIN=''
+log() { printf '[lmm %s] %s\n' "$TARGET" "$*" >&2; }
+fail() { log "ERROR: $*"; exit 1; }
+usage() {
+  cat <<USAGE
+LMM $TARGET installer $SCRIPT_VERSION
+Usage: bash $TARGET.sh [options] [-- launch arguments]
+  --check              Read-only environment/installation check
+  --update             Reinstall the versions pinned in versions.json
+  --root PATH          User-owned install directory (default: $ROOT)
+  --network MODE       auto (latency probes), official, or china
+  --profile NAME       DSH: web or headless (default: web)
+  --no-install-node    Require an existing compatible Node/npm
+  --add-path           Opt in to adding a backed-up shell PATH entry
+  --no-path            Keep startup files unchanged (default)
+  --install-only       Compatibility alias: do not launch
+  --no-bootstrap       Require existing compatible Node and managed client
+  --from-source        LMM CLI: build the pinned crate using existing Rust 1.88+
+  --launch             Start the installed tool (DSH starts the chosen profile)
+  --help               Show this help
+No automatic login or PATH changes. Versions and platform notes: README.md.
+USAGE
+}
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --help|-h) usage; exit 0;;
+    --check) CHECK=1;; --update) FORCE=1;; --launch) LAUNCH=1;;
+    --add-path) ADD_PATH=1;; --no-path) ADD_PATH=0;; --install-only) LAUNCH=0;; --no-bootstrap) INSTALL_NODE=0; BOOTSTRAP=0;; --from-source) SOURCE=1;; --no-install-node) INSTALL_NODE=0;;
+    --root|--network|--profile)
+      if [ "$#" -lt 2 ] || [ -z "${2:-}" ]; then fail "$1 requires a value"; fi
+      case "$1" in --root) ROOT=$2;; --network) NETWORK=$2;; --profile) PROFILE=$2;; esac; shift;;
+    --) shift; RUN_ARGS=("$@"); break;;
+    *) fail "Unknown option: $1 (use --help)";;
+  esac
+  shift
+done
+RETRIES=${LMM_RETRIES:-3}
+CONNECT_TIMEOUT=${LMM_CONNECT_TIMEOUT:-10}
+STALL_TIMEOUT=${LMM_STALL_TIMEOUT:-20}
+DOWNLOAD_TIMEOUT=${LMM_DOWNLOAD_TIMEOUT:-600}
+COMMAND_TIMEOUT=${LMM_COMMAND_TIMEOUT:-1800}
+MIN_SPEED=${LMM_MIN_SPEED_BYTES:-16384}
+for setting in "$RETRIES" "$CONNECT_TIMEOUT" "$STALL_TIMEOUT" "$DOWNLOAD_TIMEOUT" "$COMMAND_TIMEOUT" "$MIN_SPEED"; do
+  [[ $setting =~ ^[1-9][0-9]*$ && ${#setting} -le 8 ]] || fail 'Timeouts, retry counts and minimum speed must be positive integers.'
+done
+((RETRIES <= 10 && CONNECT_TIMEOUT <= 300 && STALL_TIMEOUT <= 86400 && DOWNLOAD_TIMEOUT <= 86400 && COMMAND_TIMEOUT <= 86400 && MIN_SPEED <= 10485760)) || fail 'Network setting exceeds supported limits.'
+case "$ROOT" in /*) ;; *) ROOT="$PWD/$ROOT";; esac
+CACHE=${LMM_CACHE_ROOT:-$ROOT/cache}
+case "$CACHE" in /*) ;; *) fail 'LMM_CACHE_ROOT must be an absolute path';; esac
+if [ "$CACHE" = / ] || [ -L "$ROOT" ] || [ -L "$CACHE" ]; then fail 'Refusing root or symlink installation/cache paths.'; fi
+for custom in "${LMM_NODE_BASE_URL:-}" "${LMM_NPM_REGISTRY:-}"; do
+  if [ -n "$custom" ]; then case "$custom" in https://*) ;; *) fail 'Custom mirrors must use HTTPS';; esac
+    case "$custom" in *'@'*|*$'\n'*|*$'\r'*) fail 'Custom mirrors must not contain embedded credentials or newlines';; esac
+  fi
+done
+case "$NETWORK" in auto|official|china) ;; *) fail 'network must be auto, official or china';; esac
+case "$PROFILE" in web|headless) ;; *) fail 'profile must be web or headless';; esac
+[ "$TARGET" = lmm ] || [ "$SOURCE" = 0 ] || fail '--from-source is only for lmm'
+case "$ROOT" in *$'\n'*|*$'\r'*) fail 'Install path must not contain newlines';; /*) ;; *) ROOT="$PWD/$ROOT";; esac
+if [ "$ROOT" = / ] || [ "$ROOT" = "$HOME" ]; then fail 'Choose a dedicated installation directory'; fi
+case "$(uname -s)" in Linux|Android) OS=linux;; Darwin) OS=darwin;; *) fail 'Use the .ps1 script on Windows.';; esac
+if lmm_is_termux; then OS=android; fi
+case "$(uname -m)" in
+  x86_64|amd64) ARCH=x64;; arm64|aarch64) ARCH=arm64;;
+  armv7l|armv8l|arm) [ "$OS" = android ] || fail '32-bit desktop Linux is not supported'; ARCH=arm;;
+  i386|i686) [ "$OS" = android ] || fail '32-bit desktop Linux is not supported'; ARCH=ia32;;
+  *) fail 'Unsupported CPU';;
+esac
+PLATFORM="$OS-$ARCH"
+lmm_check_storage "$ROOT" || exit 1
+lmm_check_storage "$CACHE" || exit 1
+if [ "$OS" = android ] && [ "$TARGET" != lmm ]; then
+  compatible_node || fail 'In Termux, install native Node/npm: pkg install nodejs npm git; then rerun. Desktop Node cannot run on Android.'
+  command -v git >/dev/null 2>&1 || fail 'Pi/DSH need git: pkg install git'
+fi
+# --check never creates directories, downloads, edits PATH or touches credentials.
+if [ "$CHECK" = 1 ]; then
+  log "Platform: $PLATFORM; install root: $ROOT"
+  if [ -x "$ROOT/bin/$TARGET" ]; then "$ROOT/bin/$TARGET" --version
+  elif command -v "$TARGET" >/dev/null 2>&1; then "$TARGET" --version
+  else log "$TARGET is not installed in this root or PATH"; exit 1; fi
+  if [ "$TARGET" != lmm ]; then
+    if compatible_node; then log 'Current PATH has compatible Node/npm.'
+    elif [ -x "$ROOT/runtime/node-v$NODE_VERSION-$PLATFORM/bin/node" ]; then log 'Managed Node runtime is available.'
+    else fail 'No compatible Node runtime found'; fi
+  fi
+
+  log 'Executable check complete; login and model access are not inferred.'
+  exit 0
+fi
+release_setup() {
+  if [ -n "$STAGE" ] && [ -d "$STAGE" ]; then rm -rf -- "$STAGE"; fi
+  STAGE=''
+  if [ "$LOCKED" = 1 ] && [ "$(cat "$ROOT/.setup-lock/pid" 2>/dev/null || true)" = "$$" ]; then
+    rm -f -- "$ROOT/.setup-lock/pid" "$ROOT/.setup-lock/owner"
+    rmdir "$ROOT/.setup-lock" 2>/dev/null || true
+  fi
+  LOCKED=0
+}
+cleanup() {
+  rc=$?
+  trap - EXIT
+  release_setup
+  if [ "$rc" -ne 0 ]; then
+    log "Stopped during $PHASE. Existing launchers were preserved unless installation already completed."
+    log 'Check disk space, HTTPS proxy/CA settings, or retry --network official / --network china. Do not disable TLS validation.'
+  fi
+  exit "$rc"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+umask 077
+if [ "$OS" = android ]; then
+  TMPDIR=$(lmm_temp_root); lmm_check_storage "$TMPDIR" || exit 1
+  mkdir -p "$TMPDIR"; export TMPDIR
+  if [ "$TARGET" = dsh ]; then log 'DSH native dependencies have not been validated on Android.'; fi
+fi
+mkdir -p "$ROOT" "$CACHE" "$ROOT/bin" "$ROOT/apps" "$ROOT/runtime"
+ROOT=$(cd "$ROOT" && pwd -P)
+if ! mkdir "$ROOT/.setup-lock" 2>/dev/null; then
+  oldpid=$(cat "$ROOT/.setup-lock/pid" 2>/dev/null || true)
+  case "$oldpid" in ''|*[!0-9]*) fail "Unknown lock at $ROOT/.setup-lock; inspect it before removing";; esac
+  if kill -0 "$oldpid" 2>/dev/null; then fail "Another installer is running (PID $oldpid)"; fi
+  [ "$(cat "$ROOT/.setup-lock/owner" 2>/dev/null || true)" = lmm-installer-v1 ] || fail 'Unknown lock owner'
+  rm -- "$ROOT/.setup-lock/pid" "$ROOT/.setup-lock/owner"
+  rmdir "$ROOT/.setup-lock" || fail 'Lock contains unexpected files; left it untouched'
+  mkdir "$ROOT/.setup-lock"
+fi
+printf '%s\n' "$$" > "$ROOT/.setup-lock/pid"
+printf '%s\n' lmm-installer-v1 > "$ROOT/.setup-lock/owner"
+LOCKED=1
+STAGE=$(mktemp -d "$ROOT/.setup.XXXXXX")
+# Probe only public, credential-free artifact URLs. Slow transfers are still
+# interrupted independently of the latency ranking below.
 write_launcher() {
   local launcher="$ROOT/bin/$TARGET" temp="$STAGE/launcher"
   {
-    printf '#!/usr/bin/env bash\n# Managed by LMM installers.\n'
+    if [ "$OS" = android ]; then printf '#!%s\n' "$BASH"
+    else printf '#!/usr/bin/env bash\n'; fi
+    printf '# Managed by LMM installers.\n' 
     # The launcher must expand PATH when it runs, not while it is generated.
     # shellcheck disable=SC2016
     if [ "$TARGET" != lmm ]; then printf 'export PATH=%s:"$PATH"\n' "$(quote_sh "$NODE_BIN${PNPM_BIN:+:$PNPM_BIN}")"; fi
-    printf 'exec %s "$@"\n' "$(quote_sh "$CLIENT")"
+    if [ "$TARGET" = lmm ]; then printf 'exec %s "$@"\n' "$(quote_sh "$CLIENT")"
+    else printf 'exec %s %s "$@"\n' "$(quote_sh "$NODE_BIN/node")" "$(quote_sh "$CLIENT")"; fi
   } > "$temp"
   chmod +x "$temp"
   if [ -e "$launcher" ] && ! grep -q '# Managed by LMM installers.' "$launcher"; then fail "Refusing to overwrite your existing launcher: $launcher"; fi
@@ -398,21 +391,7 @@ add_path() {
     printf '\n%s\n%s\n# <<< LMM tools PATH <<<\n' "$marker" "$line" >> "$file"
   done
 }
-if [ "$TARGET" = lmm ]; then install_lmm
-else
-  ensure_node; configure_npm
-  if [ "$TARGET" = pi ]; then
-    install_client @earendil-works/pi-coding-agent "$PI_VERSION" pi
-    PHASE='Pi LMM provider'; with_registry_retry "$CLIENT" install "npm:@tokennotincluded/pi-lmm-provider@$PI_PROVIDER_VERSION"
-  else
-    ensure_pnpm
-    install_client @deepseek-ai/dsh "$DSH_VERSION" dsh
-    PHASE='DSH LMM provider'
-    artifact="$CACHE/${DSH_PROVIDER_URL##*/}"
-    download "$DSH_PROVIDER_URL" "$artifact" "$DSH_PROVIDER_SHA256"
-    with_registry_retry "$CLIENT" plugin --profile "$PROFILE" add "$artifact" --ignore-scripts --store-dir "$CACHE/pnpm"
-  fi
-fi
+install_tool
 PHASE='launchers and PATH'; write_launcher; add_path
 log "Ready: $ROOT/bin/$TARGET"
 log "Use the full command above, or for this terminal: export PATH=$(quote_sh "$ROOT/bin"):\"\$PATH\""

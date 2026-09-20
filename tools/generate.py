@@ -64,6 +64,10 @@ def main() -> None:
             parts.append(f'tools/{target}.{ext}')
             body = template(f'install.{ext}.in').replace('@@LIBRARIES@@', libraries(*parts))
             body = body.replace('@@NODE_CHECK@@', template('lib/node-check.sh') if target != 'lmm' and ext == 'sh' else '')
+            client = target != 'lmm'
+            body = body.replace('@@CLIENT_STATE@@', 'INSTALL_NODE=1 BOOTSTRAP=1 NPM_SELECTED=0' if client else '')
+            body = body.replace('@@NO_BOOTSTRAP@@', 'INSTALL_NODE=0; BOOTSTRAP=0' if client else ':')
+            body = body.replace('@@NO_INSTALL_NODE@@', 'INSTALL_NODE=0' if client else ':')
             body = body.replace('@@CONSTANTS@@', constants(versions, target, ext, body))
             if ext == 'sh':
                 body = standalone(body, 'lmm_install_main')

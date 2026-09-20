@@ -2,6 +2,7 @@
 # Complete function before execution: safe when downloaded through a pipe.
 lmm_menu_main() (
 set -u
+@@LIBRARIES@@
 case "${1:-}" in
   --help|-h) printf 'LMM menu: bash menu.sh [--help]\nInteractive terminal required. Choose Pi, DSH or LMM CLI, then an action.\n'; exit 0;;
   '') ;;
@@ -11,30 +12,29 @@ if ! { exec 3</dev/tty; } 2>/dev/null; then
   printf '需要交互终端。请在终端运行菜单；自动化请使用底层安装脚本。\n' >&2; exit 2
 fi
 command -v curl >/dev/null 2>&1 || { printf '请先安装 curl。\n' >&2; exit 2; }
-hash_file() {
-  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d ' ' -f 1
-  elif command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | cut -d ' ' -f 1
-  else printf '需要 sha256sum 或 shasum。\n' >&2; return 1; fi
-}
 expected_hash() { case "$1" in
 @@HASHES@@
 *) return 1;;
 esac; }
 ask() { printf '%s' "$1"; IFS= read -r answer <&3 || exit 0; }
-work=$(mktemp -d "${TMPDIR:-/tmp}/lmm-menu.XXXXXXXX") || exit 1
+umask 077
+temp_root=$(lmm_temp_root)
+lmm_check_storage "$temp_root" || exit 1
+mkdir -p "$temp_root" || exit 1
+work=$(mktemp -d "$temp_root/lmm-menu.XXXXXXXX") || exit 1
 trap 'rm -rf -- "$work"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 network=auto
-root=${LMM_INSTALL_ROOT:-${XDG_DATA_HOME:-$HOME/.local/share}/lmm-tools}
+root=$(lmm_root)
 fetch_script() {
   local name=$1 expected url
   expected=$(expected_hash "$name") || return 1
-  if [ -f "$work/$name" ] && [ "$(hash_file "$work/$name")" = "$expected" ]; then return 0; fi
+  if [ -f "$work/$name" ] && [ "$(sha256 "$work/$name")" = "$expected" ]; then return 0; fi
   printf '正在获取并校验安装程序（下载慢时会重试）…\n'
   for url in "https://api.lmm.best/scripts/$name" "https://raw.githubusercontent.com/TokenNotIncluded/lmm-scripts/@@REVISION@@/$name"; do
     if curl -q -fSL --proto '=https' --proto-redir '=https' --connect-timeout 10 --max-time 120 --speed-limit 1024 --speed-time 20 --retry 2 --retry-delay 2 "$url" -o "$work/download"; then
-      if [ "$(hash_file "$work/download")" = "$expected" ]; then mv "$work/download" "$work/$name"; return 0; fi
+      if [ "$(sha256 "$work/download")" = "$expected" ]; then mv "$work/download" "$work/$name"; return 0; fi
       printf '文件版本或校验不匹配，尝试固定版本备用地址。\n' >&2
     fi
   done

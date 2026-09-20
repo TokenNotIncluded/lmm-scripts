@@ -2,6 +2,41 @@
 # Complete function before execution: safe when downloaded through a pipe.
 lmm_menu_main() (
 set -u
+lmm_root() {
+  printf '%s\n' "${LMM_INSTALL_ROOT:-${XDG_DATA_HOME:-$HOME/.local/share}/lmm-tools}"
+}
+sha256() {
+  local digest
+  if command -v sha256sum >/dev/null 2>&1; then digest=$(sha256sum "$1") || return; printf '%s\n' "${digest%% *}"
+  elif command -v shasum >/dev/null 2>&1; then digest=$(shasum -a 256 "$1") || return; printf '%s\n' "${digest%% *}"
+  elif command -v openssl >/dev/null 2>&1; then digest=$(openssl dgst -sha256 "$1") || return; printf '%s\n' "${digest##* }"
+  else printf 'Install a SHA-256 tool.\n' >&2; return 1; fi
+}
+# Native Termux uses Android/bionic, not desktop Linux/glibc.
+lmm_is_termux() {
+  [ -n "${TERMUX_VERSION:-}${TERMUX_APP__PACKAGE_NAME:-}" ] ||
+    case "${PREFIX:-}" in */com.termux/files/usr) true;; *) false;; esac
+}
+lmm_temp_root() {
+  if [ -n "${TMPDIR:-}" ]; then printf '%s\n' "$TMPDIR"
+  elif lmm_is_termux; then printf '%s/tmp\n' "${PREFIX:-$HOME/.cache/lmm-tools}"
+  else printf '/tmp\n'; fi
+}
+lmm_check_storage() {
+  lmm_is_termux || return 0
+  local resolved
+  # realpath -m also resolves missing paths and symlinked storage aliases.
+  command -v realpath >/dev/null 2>&1 || {
+    printf 'Termux needs coreutils: pkg install coreutils\n' >&2; return 1;
+  }
+  resolved=$(realpath -m -- "$1") || return 1
+  case "$resolved/" in
+    /sdcard/*|/storage/*|/mnt/sdcard/*|/mnt/media_rw/*|/mnt/runtime/*|/mnt/user/*|/mnt/pass_through/*)
+      printf 'Use Termux private storage under HOME, not shared storage: %s\n' "$1" >&2
+      return 1;;
+  esac
+}
+
 case "${1:-}" in
   --help|-h) printf 'LMM menu: bash menu.sh [--help]\nInteractive terminal required. Choose Pi, DSH or LMM CLI, then an action.\n'; exit 0;;
   '') ;;
@@ -11,11 +46,6 @@ if ! { exec 3</dev/tty; } 2>/dev/null; then
   printf '需要交互终端。请在终端运行菜单；自动化请使用底层安装脚本。\n' >&2; exit 2
 fi
 command -v curl >/dev/null 2>&1 || { printf '请先安装 curl。\n' >&2; exit 2; }
-hash_file() {
-  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d ' ' -f 1
-  elif command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | cut -d ' ' -f 1
-  else printf '需要 sha256sum 或 shasum。\n' >&2; return 1; fi
-}
 expected_hash() { case "$1" in
 pi.sh) printf '%s' 'ae5f009593005768c10266618049135d0a9a42eb05f2d357ba5dbc4fccb533bf';;
 dsh.sh) printf '%s' 'd4d18452773a93c8f22b1722ff4fce0d32af870510065d3a1472530b477e23b0';;
@@ -24,20 +54,24 @@ lmm-use.sh) printf '%s' '5240b7192e0fcb7700fd76b0d375f528422d6f38e751d220e9202ac
 *) return 1;;
 esac; }
 ask() { printf '%s' "$1"; IFS= read -r answer <&3 || exit 0; }
-work=$(mktemp -d "${TMPDIR:-/tmp}/lmm-menu.XXXXXXXX") || exit 1
+umask 077
+temp_root=$(lmm_temp_root)
+lmm_check_storage "$temp_root" || exit 1
+mkdir -p "$temp_root" || exit 1
+work=$(mktemp -d "$temp_root/lmm-menu.XXXXXXXX") || exit 1
 trap 'rm -rf -- "$work"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 network=auto
-root=${LMM_INSTALL_ROOT:-${XDG_DATA_HOME:-$HOME/.local/share}/lmm-tools}
+root=$(lmm_root)
 fetch_script() {
   local name=$1 expected url
   expected=$(expected_hash "$name") || return 1
-  if [ -f "$work/$name" ] && [ "$(hash_file "$work/$name")" = "$expected" ]; then return 0; fi
+  if [ -f "$work/$name" ] && [ "$(sha256 "$work/$name")" = "$expected" ]; then return 0; fi
   printf '正在获取并校验安装程序（下载慢时会重试）…\n'
   for url in "https://api.lmm.best/scripts/$name" "https://raw.githubusercontent.com/TokenNotIncluded/lmm-scripts/95c162c2031ecba34942b2a91631c1ec1f6f3d05/$name"; do
     if curl -q -fSL --proto '=https' --proto-redir '=https' --connect-timeout 10 --max-time 120 --speed-limit 1024 --speed-time 20 --retry 2 --retry-delay 2 "$url" -o "$work/download"; then
-      if [ "$(hash_file "$work/download")" = "$expected" ]; then mv "$work/download" "$work/$name"; return 0; fi
+      if [ "$(sha256 "$work/download")" = "$expected" ]; then mv "$work/download" "$work/$name"; return 0; fi
       printf '文件版本或校验不匹配，尝试固定版本备用地址。\n' >&2
     fi
   done
