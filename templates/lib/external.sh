@@ -39,12 +39,17 @@ lmm_external_main() (
     [ "$KIND" = cli ] || die "$APP is a desktop application; Termux is not supported"
     lmm_check_storage "$ROOT" || exit 1
   elif [ "$OS" = linux ]; then
-    local ID='' ID_LIKE=''
-    if [ -f "${LMM_OS_RELEASE:-/etc/os-release}" ]; then
-      # shellcheck disable=SC1090
-      . "${LMM_OS_RELEASE:-/etc/os-release}"
-    fi
-    case " $ID $ID_LIKE " in
+    local distro_info
+    distro_info=$(
+      ID='' ID_LIKE=''
+      if [ -f "${LMM_OS_RELEASE:-/etc/os-release}" ]; then
+        # Do not let os-release VERSION replace the requested tool version.
+        # shellcheck disable=SC1090
+        . "${LMM_OS_RELEASE:-/etc/os-release}"
+      fi
+      printf '%s %s\n' "$ID" "$ID_LIKE"
+    )
+    case " $distro_info " in
       *alpine*) FAMILY=alpine;; *debian*|*ubuntu*) FAMILY=debian;;
       *fedora*|*rhel*|*centos*|*rocky*|*almalinux*) FAMILY=fedora;; *suse*) FAMILY=suse;;
       *arch*) FAMILY=arch;; *void*) FAMILY=void;; *nixos*) FAMILY=nixos;;

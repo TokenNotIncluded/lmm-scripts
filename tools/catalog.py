@@ -9,3 +9,4 @@ TOOLS = (
     ('clash-verge-rev', 'Clash Verge Rev', 'desktop'),
 )
 EXTERNAL = tuple(name for name, _, kind in TOOLS if kind != 'managed')
+MANAGED = tuple(name for name, _, kind in TOOLS if kind == 'managed')

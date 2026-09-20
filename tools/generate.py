@@ -5,7 +5,7 @@ import json
 import re
 import shlex
 from render import ROOT, emit, libraries, standalone, template
-from catalog import EXTERNAL
+from catalog import EXTERNAL, MANAGED
 
 # JSON field -> shell / PowerShell variable. Keep a single naming map.
 NAMES = {
@@ -59,7 +59,7 @@ def main() -> None:
     versions = json.loads((ROOT / 'versions.json').read_text(encoding='utf-8'))
     if not re.fullmatch(r'[0-9a-f]{40}', versions['library_revision']):
         raise ValueError('library_revision must be a full Git commit ID')
-    for target in ('pi', 'dsh', 'lmm'):
+    for target in MANAGED:
         for ext in ('sh', 'ps1'):
             parts = ['lib/hash.sh', 'lib/termux.sh', 'lib/quote.sh'] if ext == 'sh' else ['lib/common.ps1']
             parts.append(f'lib/download.{ext}')

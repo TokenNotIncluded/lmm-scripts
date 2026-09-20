@@ -14,6 +14,7 @@ from pathlib import Path
 name=Path(sys.argv[0]).name; args=sys.argv[1:]
 with open(os.environ['TEST_LOG'],'a') as f: f.write(json.dumps([name,args])+'\n')
 if name=='uname': print(os.environ.get('TEST_OS','Linux') if '-s' in args else os.environ.get('TEST_ARCH','x86_64'))
+elif name=='realpath': print(os.path.realpath(args[-1]))
 elif name=='ldd': print(os.environ.get('TEST_LIBC','glibc'))
 elif name=='curl':
     out=Path(args[args.index('-o')+1])
@@ -32,7 +33,7 @@ class ExternalTests(unittest.TestCase):
         self.fake=self.base/'bin'; self.fake.mkdir(); (self.base/'home').mkdir()
         self.log=self.base/'calls'; self.log.write_text('')
         self.release=self.base/'os-release'
-        for name in ('uname','ldd','curl','proot-distro','apk','apt-get','dnf','pacman','zypper','xbps-install','rg'):
+        for name in ('uname','realpath','ldd','curl','proot-distro','apk','apt-get','dnf','pacman','zypper','xbps-install','rg'):
             p=self.fake/name; p.write_text(FAKE); p.chmod(0o755)
         self.env=dict(os.environ,HOME=str(self.base/'home'),TMPDIR=str(self.base),PATH=str(self.fake)+os.pathsep+os.environ['PATH'],TERMUX_VERSION='',TERMUX_APP__PACKAGE_NAME='',PREFIX='',LMM_OS_RELEASE=str(self.release),LMM_INSTALL_ROOT=str(self.base/'tools'),TEST_LOG=str(self.log),TEST_MARKER=str(self.base/'bad'),TEST_ARGS=str(self.base/'args'))
         for key in ('CODEX_INSTALL_DIR','CODEX_HOME','LMM_PROOT_DISTRO'): self.env.pop(key,None)
@@ -41,7 +42,7 @@ class ExternalTests(unittest.TestCase):
     def tearDown(self): self.tmp.cleanup()
 
     def run_tool(self,target,*args,distro='ubuntu',**env):
-        self.release.write_text(f'ID={distro}\n')
+        self.release.write_text(f'ID={distro}\nVERSION="24.04.5 LTS (Noble Numbat)"\nNAME="Fixture Linux"\n')
         return subprocess.run(['bash','-c',self.code+'\nTARGET=$1; shift; lmm_external_main "$@"','test',target,*args],env=self.env|env,text=True,capture_output=True,timeout=30)
 
     def calls(self): return [json.loads(x) for x in self.log.read_text().splitlines()]
@@ -68,6 +69,15 @@ class ExternalTests(unittest.TestCase):
     def test_claude_explicit_latest_is_not_replaced_by_stable(self):
         r=self.run_tool('claude-code','--version','latest'); self.assertEqual(r.returncode,0,r.stderr)
         self.assertEqual((self.base/'args').read_text().strip(),'latest')
+
+    def test_os_release_does_not_override_tool_version(self):
+        for target, expected in [('codex', ['--release', 'latest']), ('claude-code', ['stable'])]:
+            r=self.run_tool(target, '--update')
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertEqual((self.base/'args').read_text().splitlines(), expected)
+        r=self.run_tool('codex', '--version', '1.2.3')
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual((self.base/'args').read_text().splitlines(), ['--release', '1.2.3'])
 
     def test_partial_upstream_script_is_not_executed(self):
         r=self.run_tool('codex',TEST_FAIL='1'); self.assertNotEqual(r.returncode,0)
