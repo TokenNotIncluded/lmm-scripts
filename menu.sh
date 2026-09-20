@@ -47,9 +47,9 @@ if ! { exec 3</dev/tty; } 2>/dev/null; then
 fi
 command -v curl >/dev/null 2>&1 || { printf '请先安装 curl。\n' >&2; exit 2; }
 expected_hash() { case "$1" in
-pi.sh) printf '%s' 'd8c82a3b9cc6821199e7276f2fda34d2ad7624fc8e771495bb506bdf0427e1ca';;
-dsh.sh) printf '%s' '5aadceeee493de9fe9f195f461dbd06a6b82424c680702be753d7fbfd22b9031';;
-lmm.sh) printf '%s' '7dbae6a302e755d86c8deb9a34ce3c11a25975ddf39330635479c545f84d6fff';;
+pi.sh) printf '%s' 'c027a9ec05ca3aebac4625a5bf8c9a6d187689946e37cfed05148bc55905fe88';;
+dsh.sh) printf '%s' '39aedcac869fe80322f9a41d689136584f89fe899c87882aaec79e5612863033';;
+lmm.sh) printf '%s' '15d459a5acb210588608b1d0d3d80de78f60771c7c3596c9d300549eb5f19473';;
 lmm-use.sh) printf '%s' '8f5cb27ef99bc3fd51a5b85e5aba0418f791e3cae03cd0ea624384b3dd50a06b';;
 *) return 1;;
 esac; }
@@ -69,7 +69,7 @@ fetch_script() {
   expected=$(expected_hash "$name") || return 1
   if [ -f "$work/$name" ] && [ "$(sha256 "$work/$name")" = "$expected" ]; then return 0; fi
   printf '正在获取并校验安装程序（下载慢时会重试）…\n'
-  for url in "https://api.lmm.best/scripts/$name" "https://raw.githubusercontent.com/TokenNotIncluded/lmm-scripts/73237be36d2c3e3a8763019f97179b5490e5405b/$name"; do
+  for url in "https://api.lmm.best/scripts/$name" "https://raw.githubusercontent.com/TokenNotIncluded/lmm-scripts/9c8f76329ec7846e5b899b2e9fef2320172cdbb7/$name"; do
     if curl -q -fSL --proto '=https' --proto-redir '=https' --connect-timeout 10 --max-time 120 --speed-limit 1024 --speed-time 20 --retry 2 --retry-delay 2 "$url" -o "$work/download"; then
       if [ "$(sha256 "$work/download")" = "$expected" ]; then mv "$work/download" "$work/$name"; return 0; fi
       printf '文件版本或校验不匹配，尝试固定版本备用地址。\n' >&2

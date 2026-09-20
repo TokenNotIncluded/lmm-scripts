@@ -25,7 +25,7 @@ function Fetch-Script([string]$Name) {
   $path = Join-Path $work $Name
   if ((Test-Path -LiteralPath $path) -and ((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash -eq $hashes[$Name])) { return $path }
   Write-Host '正在获取并校验安装程序（下载慢时会重试）…'
-  foreach ($url in @("https://api.lmm.best/scripts/$Name", "https://raw.githubusercontent.com/TokenNotIncluded/lmm-scripts/73237be36d2c3e3a8763019f97179b5490e5405b/$Name")) {
+  foreach ($url in @("https://api.lmm.best/scripts/$Name", "https://raw.githubusercontent.com/TokenNotIncluded/lmm-scripts/9c8f76329ec7846e5b899b2e9fef2320172cdbb7/$Name")) {
     for ($attempt = 1; $attempt -le 3; $attempt++) {
       try {
         Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $path -TimeoutSec 120 -ErrorAction Stop
