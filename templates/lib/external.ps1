@@ -77,9 +77,11 @@ function Invoke-ExternalSetup {
     return
   }
   $stage=$null
+  $oldNonInteractive=$env:CODEX_NON_INTERACTIVE
   $oldTls=[Net.ServicePointManager]::SecurityProtocol
   try {
     [Net.ServicePointManager]::SecurityProtocol=$oldTls -bor [Net.SecurityProtocolType]::Tls12
+    if ($Target -eq 'codex') { $env:CODEX_NON_INTERACTIVE='true' }
     if (!$entry -or $Update) {
       $stage=Join-Path ([IO.Path]::GetTempPath()) ('lmm-'+[Guid]::NewGuid().ToString('N'))
       New-Item -ItemType Directory -Path $stage | Out-Null
@@ -128,6 +130,7 @@ function Invoke-ExternalSetup {
     if ($Launch) { & $entry @RunArgs; if ($LASTEXITCODE -ne 0) { throw "Program exited with $LASTEXITCODE" } }
   } finally {
     [Net.ServicePointManager]::SecurityProtocol=$oldTls
+    $env:CODEX_NON_INTERACTIVE=$oldNonInteractive
     if ($stage) { Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue }
   }
 }

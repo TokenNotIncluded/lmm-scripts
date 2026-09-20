@@ -18,6 +18,12 @@
 
 Pi 插件可用原生命令 `pi remove npm:@tokennotincluded/pi-lmm-provider` 移除。DSH 插件维护以 `dsh plugin --help` 和当前 profile 的原生设置为准。删除客户端不等于退出账号；先在客户端退出，需要撤销授权时再到 LMM 账号管理中撤销。保留 `~/.pi/agent`、`DSH_HOME` 的设置与会话，除非你明确要删除这些数据。
 
+## 新增入口与菜单
+
+`tools/catalog.py` 是工具名称、菜单顺序和入口生成的唯一清单。四个新增工具共用 `templates/lib/external.*`；旧安装器的清理、PATH 与启动器逻辑移到 `lifecycle.*`。`--dry-run` / `-DryRun` 只显示选择，不安装；默认仍需获取公共模块，本地测试可设 `LMM_LIB_DIR`。
+
+新增工具的 `--network china` 只为本脚本下载的 GitHub 文件选择备用源，不改变官方安装器内部下载源。依赖安装只在 `--install-deps` 时进行；发行版桌面包本身通过包管理器解析依赖。桌面 `--check` 仅检查入口，不偷偷启动图形程序。
+
 ## 开发与检查
 
 ```sh
@@ -28,6 +34,8 @@ shellcheck *.sh
 python3 tests/test_installers.py
 python3 tests/test_official_policy.py
 python3 tests/test_library_loader.py
+python3 tests/test_external.py
+python3 tests/test_catalog.py
 pwsh -NoProfile -File tests/test-powershell.ps1
 pwsh -NoProfile -File tests/test-official-policy.ps1
 pwsh -NoProfile -File tests/test-library-loader.ps1

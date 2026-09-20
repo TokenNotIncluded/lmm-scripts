@@ -35,6 +35,27 @@ curl -fsSL https://api.lmm.best/scripts/menu.sh | bash
 
 Pi 的安装方式遵循官方 Termux 文档。DSH 的 Android 原生依赖、LMM CLI 的 Android 源码构建尚未经真机验证；LMM CLI 没有 Android 预编译包。环境模拟测试不等于真机验证。
 
+## 新增工具
+
+菜单也提供 Codex、Claude Code、CC Switch 和 Clash Verge Rev。文件名分别为 `codex`、`claude-code`、`cc-switch`、`clash-verge-rev`，后缀按系统选择 `.sh` / `.ps1`。
+
+```sh
+bash codex.sh --dry-run           # 查看安装方式，不安装
+bash codex.sh                     # 使用官方安装器
+bash claude-code.sh --update      # 官方 stable；--version latest 可改通道
+bash claude-code.sh --install-deps # 明确允许安装当前发行版的依赖
+```
+
+Windows 对应 `-DryRun`、`-Update`、`-Version`。Codex/Claude 使用上游原生安装目录、PATH 和自动更新策略，不强塞到 LMM 独立 npm 目录；无需 Node。安装不会替你登录、修改模型供应商或关闭沙箱。
+
+Linux CLI 根据 libc 使用官方安装器，依赖命令覆盖 Debian/Ubuntu、Fedora/RHEL、openSUSE、Arch、Alpine、Void；不执行系统升级。Alpine 的 Claude 需要 `libgcc libstdc++ ripgrep`；NixOS 需自行使用 Nix 包环境，不声称通用二进制可直接运行。
+
+Termux 的这两个 CLI 使用已有的 PRoot Linux guest，不是原生 Android 安装。先执行 `pkg install proot-distro`、`proot-distro install ubuntu:24.04`，再运行 `bash codex.sh --install-deps`；另一个 guest 用 `--distro NAME`。安装器不创建/重置 guest；默认 Ubuntu 的依赖可由 `--install-deps` 准备。启动器绑定当前工作目录，参数原样转发；PRoot 不等于完整 Linux 沙箱，真机尚未验证。
+
+桌面工具在 Termux 菜单中隐藏。Linux 使用 deb/rpm、现有 AUR helper；CC Switch 另有 AppImage，Clash Verge Rev 不假设存在 AppImage。macOS 优先复用 Homebrew，否则安装官方 DMG；Windows 分别使用官方 portable ZIP、官方安装窗口。桌面安装可能要求管理员授权，Clash 安装包可能带服务；脚本不自动启用代理、TUN、订阅，也不绕过系统签名提示。
+
+来源和支持边界见 [安装核查](docs/install-sources.md)。
+
 ## 安装后怎么用
 
 没有加入 PATH 时，用安装结束打印的完整路径代替下方的工具名。
@@ -91,7 +112,7 @@ $env:LMM_LIB_DIR = Join-Path $PWD 'templates/lib'
 
 ## 环境与故障
 
-默认目录：Unix 为 `${XDG_DATA_HOME:-~/.local/share}/lmm-tools`，Windows 为 `%LOCALAPPDATA%\lmm-tools`；可用 `LMM_INSTALL_ROOT` 或 `--root` / `-Root` 修改。不覆盖系统 Node 或全局 npm 包。
+Pi/DSH/LMM 的默认目录：Unix 为 `${XDG_DATA_HOME:-~/.local/share}/lmm-tools`，Windows 为 `%LOCALAPPDATA%\lmm-tools`；可用 `LMM_INSTALL_ROOT` 或 `--root` / `-Root` 修改。不覆盖系统 Node 或全局 npm 包。
 
 Pi 使用官方的 `npm install --ignore-scripts`，接受已有的 `ignore-scripts=true`。DSH 的原生构建策略单独处理，不解除用户的构建限制。Node 要求为 22.19+ 的 22.x 或 24+。
 

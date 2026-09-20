@@ -5,6 +5,7 @@ import json
 import re
 import shlex
 from render import ROOT, emit, libraries, standalone, template
+from catalog import EXTERNAL
 
 # JSON field -> shell / PowerShell variable. Keep a single naming map.
 NAMES = {
@@ -62,6 +63,7 @@ def main() -> None:
         for ext in ('sh', 'ps1'):
             parts = ['lib/hash.sh', 'lib/termux.sh', 'lib/quote.sh'] if ext == 'sh' else ['lib/common.ps1']
             parts.append(f'lib/download.{ext}')
+            parts.append(f'lib/lifecycle.{ext}')
             if target != 'lmm':
                 parts.append(f'lib/node.{ext}')
             parts.append(f'tools/{target}.{ext}')
@@ -81,10 +83,16 @@ def main() -> None:
             body = body.replace('@@NO_INSTALL_NODE@@', 'INSTALL_NODE=0' if client else ':')
             body = body.replace('@@CONSTANTS@@', constants(versions, target, ext, body + '\n' + shared))
             if ext == 'sh':
-                body = standalone(body, 'lmm_install_main')
+                body = standalone(body, 'lmm_install_main').replace('lmm_install_main() {', '# State is consumed by fetched modules.\n# shellcheck disable=SC2034\nlmm_install_main() {', 1)
             else:
                 body.encode('ascii')
             emit(f'{target}.{ext}', body, args.check)
+    for target in EXTERNAL:
+        for ext in ('sh', 'ps1'):
+            text = template(f'external.{ext}.in').replace('@@TARGET@@', target)
+            text = text.replace('@@REVISION@@', versions['library_revision'])
+            text = text.replace('@@LOADER@@', template(f'load.{ext}.in'))
+            emit(f'{target}.{ext}', text, args.check)
     use = template('use.sh.in').replace('@@LIBRARIES@@', libraries('lib/root.sh'))
     emit('lmm-use.sh', standalone(use, 'lmm_use_main'), args.check)
 

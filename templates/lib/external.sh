@@ -139,7 +139,7 @@ lmm_external_main() (
       fetch "$URL" "$STAGE/install.sh"
       local install_args=("$VERSION")
       [ "$TARGET" != codex ] || install_args=(--release "$VERSION")
-      proot-distro login "$DISTRO" --bind "$STAGE:/mnt/lmm-install" -- /bin/bash -c 'unset CODEX_HOME CODEX_INSTALL_DIR; bash /mnt/lmm-install/install.sh "$@"' -- "${install_args[@]}"
+      proot-distro login "$DISTRO" --bind "$STAGE:/mnt/lmm-install" -- /bin/bash -c 'unset CODEX_HOME CODEX_INSTALL_DIR; CODEX_NON_INTERACTIVE=true bash /mnt/lmm-install/install.sh "$@"' -- "${install_args[@]}"
       proot-distro login "$DISTRO" -- /bin/bash -c '"$HOME/.local/bin/$1" --version' -- "$COMMAND"
       shim "exec $(quote_sh "$(command -v proot-distro)") login $(quote_sh "$DISTRO") --bind \"\$PWD:/workspace\" --work-dir /workspace -- /bin/bash -c 'exec \"\$HOME/.local/bin/$COMMAND\" \"\$@\"' -- \"\$@\""
       printf 'Termux uses a PRoot Linux guest; native Android and sandbox parity are not implied.\n'
@@ -149,7 +149,7 @@ lmm_external_main() (
         export USE_BUILTIN_RIPGREP=0
       fi
       fetch "$URL" "$STAGE/install.sh"
-      if [ "$TARGET" = codex ]; then bash "$STAGE/install.sh" --release "$VERSION"
+      if [ "$TARGET" = codex ]; then CODEX_NON_INTERACTIVE=true bash "$STAGE/install.sh" --release "$VERSION"
       else bash "$STAGE/install.sh" "$VERSION"; fi
       ENTRY=''; find_entry
       if [ "$TARGET" = claude-code ] && [ "$LIBC" = musl ] && [ -x "$HOME/.local/bin/claude" ]; then ENTRY="$HOME/.local/bin/claude"; fi
@@ -173,6 +173,7 @@ lmm_external_main() (
 # Called inside lmm_external_main; reuse its paths and download functions.
 lmm_install_desktop() {
   local manager ext pattern metadata candidate target
+  [ "$LIBC" != musl ] || die "No compatible musl desktop package"
   if [ "$OS" = darwin ] && command -v brew >/dev/null && [ "$VERSION" = latest ]; then
     if brew list --cask "$TARGET" >/dev/null 2>&1; then brew upgrade --cask "$TARGET"
     else brew install --cask "$TARGET"; fi
