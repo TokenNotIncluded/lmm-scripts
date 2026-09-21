@@ -24,7 +24,8 @@ try {
   $expected = @('run', '--model', 'lmm:ZGVmYXVsdA:bW9kZWw', '--', 'exec', $task)
   $driver = Join-Path $work 'driver.ps1'
   $arguments = ($expected | ForEach-Object { Literal $_ }) -join ','
-  [IO.File]::WriteAllText($driver, ('& ' + (Literal $wrapper) + ' @(' + $arguments + ')'))
+  # The extra driver must splat the argument array and propagate the nested script's exit.
+  [IO.File]::WriteAllText($driver, ('$forwarded = @(' + $arguments + '); & ' + (Literal $wrapper) + ' @forwarded; exit $LASTEXITCODE'))
   & $engine -NoProfile -ExecutionPolicy Bypass -File $driver
   Assert-True ($LASTEXITCODE -eq 17) 'Child exit status was lost'
   $received = @(Get-Content -LiteralPath $receipt -Raw | ConvertFrom-Json)
