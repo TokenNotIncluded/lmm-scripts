@@ -22,14 +22,19 @@ irm https://raw.githubusercontent.com/TokenNotIncluded/lmm-scripts/main/menu.ps1
 | `cc-switch` | Linux 发行包/AUR，macOS Homebrew，Windows 官方 MSI | 桌面应用 |
 | `clash-verge-rev` | Linux deb/rpm/AUR，macOS Homebrew，Windows WinGet | 桌面应用 |
 | `lmm` | 0.1.0 预览版发行包；另支持 `--from-source` / `-FromSource` | 安装结束打印的完整路径 |
+| `codewhale` | 官方 npm 安装 + 固定版本 LMM OAuth 适配器 | `bash codewhale.sh run` / `.\codewhale.ps1 run` |
 
 Pi 的版本、Node、安装位置、权限和 Windows Git Bash 交给官方安装器。官方正常安装后，才从它选出的安装路径接着装 LMM 插件；取消或卸载不继续。现有 LMM alpha 只验证过 Pi 0.85.1，其他版本会明确跳过插件，不偷偷降级宿主。DSH 的宿主和插件继续固定已适配版本；其当前官方 README 使用 npx，没有现行的独立安装脚本，不能拿归档记录中的旧脚本替代。
 
-不写供应商配置、不登录账号、不启用系统代理或 TUN。
+原有安装器不写供应商配置、不登录账号、不启用系统代理或 TUN。Codewhale 默认 `setup` 会引导用户在浏览器确认 OAuth；`install` 只安装、不登录。两者都不覆盖原配置，见 [Codewhale 安装与配置](CODEWHALE.md)。
+
+## Codewhale
+
+菜单新增第 8 项 `codewhale`（Termux 为第 6 项），进入安装、登录、选模型启动、余额/用量和登出子菜单，原有工具编号不变。可直接运行 `bash codewhale.sh` 或 `.\codewhale.ps1` 完成安装和授权；非交互环境必须显式使用 `install`。需要服务端先部署 `lmm-codewhale` 注册，安装成功不代表生产登录已验证。
 
 ## 环境
 
-Unix 入口需要 Bash、curl。Pi 的依赖提示由官方处理；DSH 另需 Node 22.19+（22.x）或 24+、npm。不修改 npm registry。
+Unix 入口需要 Bash、curl。Pi 的依赖提示由官方处理；DSH 另需 Node 22.19+（22.x）或 24+、npm；Codewhale LMM 适配器需要 Node 22+ 和 npm。不修改 npm registry。
 
 Codex/Claude 的 Linux、macOS、Windows 安装都用官方脚本，不要求 Node，也不限定 apt 发行版。先满足上游的系统和运行库要求。Alpine 的 Claude 需要 `bash curl libgcc libstdc++ ripgrep`，运行时使用 `USE_BUILTIN_RIPGREP=0 claude`。NixOS 请使用 Nix 包环境，不保证通用二进制可运行。
 
@@ -39,7 +44,7 @@ LMM 预览包仅提供 Linux x64（glibc 2.39+）、macOS arm64、Windows x64，
 
 ## Termux
 
-Pi 先运行 `pkg install nodejs npm git` 准备 Android 原生依赖，再调用同一个官方安装器；没有 `TMPDIR` 时使用 `$PREFIX/tmp`。DSH 使用同一 npm 安装方式，Android 原生依赖尚未真机验证。
+Pi 先运行 `pkg install nodejs npm git` 准备 Android 原生依赖，再调用同一个官方安装器；没有 `TMPDIR` 时使用 `$PREFIX/tmp`。DSH 使用同一 npm 安装方式，Android 原生依赖尚未真机验证。Codewhale 使用官方 npm 的 Android 资产选择，不回退为 Linux ARM64 二进制，仍属预览且未完成真机验收。
 
 Codex/Claude 使用**已有的 PRoot Linux 环境**，不是 Android 原生二进制。先准备 `proot-distro` 和 Ubuntu guest，并在 guest 中安装 Bash、curl、CA 证书，再运行相应脚本。其他 guest 用 `LMM_DISTRO=名称 bash codex.sh`。安装后进入同一 guest 运行 `codex` / `claude`；不再生成转发启动器，不创建或重置 guest，不关闭沙箱。两个桌面工具不支持 Termux，菜单会隐藏它们。
 
@@ -47,10 +52,10 @@ Codex/Claude 使用**已有的 PRoot Linux 环境**，不是 Android 原生二�
 
 旧的 `--network`、`--root`、`--check`、`--update` 等自定义参数已移除；不要继续传入。Codex/Claude 只接受各自官方参数，DSH 可传 profile。旧版 `lmm-tools` 目录不会被删除；从 PATH 中移除旧的 `lmm-tools/bin`，避免旧启动器优先于新安装。配置和账号数据不迁移、不清空。
 
-所有安装代码平铺在根目录；只有两个 Unix 桌面入口共用 `desktop.sh`。本地运行用同目录文件，单独下载运行时用固定 Git 提交获取共用脚本；菜单同样固定到完整的安装器提交。不维护生成器或哈希清单。
+所有安装代码平铺在根目录；两个 Unix 桌面入口共用 `desktop.sh`，Codewhale 两个平台入口共用 `codewhale.mjs`。本地运行用同目录文件，单独下载运行时用固定 Git 提交获取共用脚本；Codewhale 额外校验 SHA-256。菜单同样固定到完整的安装器提交。不维护生成器或独立哈希清单。
 
 ## 依据与测试
 
-2026-09-21 核查：[Pi 官网安装入口](https://pi.dev/)（[Shell](https://pi.dev/install.sh) / [PowerShell](https://pi.dev/install.ps1)）· [Codex](https://learn.chatgpt.com/docs/codex/cli) · [Claude Code](https://code.claude.com/docs/en/setup) · [Pi Termux](https://pi.dev/docs/latest/termux) · [DSH 当前 README](https://github.com/deepseek-ai/deepseek-harness/blob/master/README.md) · [DSH 插件](https://deepseek-harness.github.io/deepseek-harness/en/develop/basic/publish) · [CC Switch](https://github.com/farion1231/cc-switch#download--installation) · [Clash Verge Rev](https://www.clashverge.dev/install.html)。LMM 插件适配版本见 [Pi 插件](https://github.com/TokenNotIncluded/pi-lmm-provider) 和 [DSH 插件](https://github.com/TokenNotIncluded/dsh-lmm-provider)。
+2026-09-21 核查：[Pi 官网安装入口](https://pi.dev/)（[Shell](https://pi.dev/install.sh) / [PowerShell](https://pi.dev/install.ps1)）· [Codex](https://learn.chatgpt.com/docs/codex/cli) · [Claude Code](https://code.claude.com/docs/en/setup) · [Pi Termux](https://pi.dev/docs/latest/termux) · [DSH 当前 README](https://github.com/deepseek-ai/deepseek-harness/blob/master/README.md) · [DSH 插件](https://deepseek-harness.github.io/deepseek-harness/en/develop/basic/publish) · [CC Switch](https://github.com/farion1231/cc-switch#download--installation) · [Clash Verge Rev](https://www.clashverge.dev/install.html)。LMM 插件适配版本见 [Pi 插件](https://github.com/TokenNotIncluded/pi-lmm-provider) 和 [DSH 插件](https://github.com/TokenNotIncluded/dsh-lmm-provider)。Codewhale 依据和平台限制见 [专用说明](CODEWHALE.md)。
 
-本地检查：`python3 test.py`、`pwsh -NoProfile -File test.ps1`、`shellcheck *.sh`。CI 另做三平台 CLI 实装和 Debian/Alpine 实装；不把模拟测试当作桌面 GUI、Termux 真机、账号登录或代理功能实测。
+本地检查：`python3 test.py`、`pwsh -NoProfile -File test.ps1`、`shellcheck *.sh`。Codewhale 另有 `node --test test-codewhale.mjs`、`python3 test-codewhale-menu.py`、`pwsh -NoProfile -File test-codewhale.ps1`。CI 另做三平台 CLI 实装和 Debian/Alpine 实装；不把模拟测试当作桌面 GUI、Termux 真机、账号登录或代理功能实测。

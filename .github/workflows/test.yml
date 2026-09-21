@@ -58,6 +58,8 @@ jobs:
         shell: powershell
         run: |
           $env:PI_CODING_AGENT_DIR="$env:RUNNER_TEMP\pi-profile"
+          # Expose only this job's chosen install path; no persistent user PATH changes.
+          $env:PATH="$env:PI_CODING_AGENT_DIR\bin;$env:PATH"
           $env:DSH_HOME="$env:RUNNER_TEMP\dsh-profile"
           $env:CODEX_HOME="$env:RUNNER_TEMP\codex-profile"
           $env:CODEX_INSTALL_DIR="$env:RUNNER_TEMP\codex-bin"
@@ -67,7 +69,7 @@ jobs:
             & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ".\$tool.ps1"
             if ($LASTEXITCODE) { throw "$tool install failed: $LASTEXITCODE" }
           }
-          foreach ($command in @('pi.cmd','dsh.cmd',"$env:CODEX_INSTALL_DIR\codex.exe","$HOME\.local\bin\claude.exe","$HOME\.local\bin\lmm.exe")) {
+          foreach ($command in @("$env:PI_CODING_AGENT_DIR\bin\pi.cmd",'dsh.cmd',"$env:CODEX_INSTALL_DIR\codex.exe","$HOME\.local\bin\claude.exe","$HOME\.local\bin\lmm.exe")) {
             & $command --version
             if ($LASTEXITCODE) { throw "$command failed: $LASTEXITCODE" }
           }

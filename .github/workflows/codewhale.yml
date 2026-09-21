@@ -1,0 +1,46 @@
+name: Codewhale installer
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.x'
+      - name: Offline contracts
+        run: node --test test-codewhale.mjs
+      - name: Actual menu terminal routing
+        if: runner.os != 'Windows'
+        run: python3 test-codewhale-menu.py
+      - name: PowerShell entrypoint contracts
+        shell: pwsh
+        run: ./test-codewhale.ps1
+      - name: Windows PowerShell 5.1 contracts
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: .\test-codewhale.ps1
+      - name: Real install, without OAuth or inference
+        shell: pwsh
+        run: |
+          $env:npm_config_prefix = Join-Path $env:RUNNER_TEMP 'codewhale-npm'
+          $env:LMM_CODEWHALE_HOME = Join-Path $env:RUNNER_TEMP 'codewhale-auth-unused'
+          Remove-Item Env:LMM_CODEWHALE_BIN -ErrorAction SilentlyContinue
+          node codewhale.mjs install
+          if ($LASTEXITCODE) { throw 'Codewhale installation/verification failed' }
+          node codewhale.mjs doctor
+          if ($LASTEXITCODE) { throw 'Native/adapter verification failed' }
+          if (Test-Path $env:LMM_CODEWHALE_HOME) { throw 'Install unexpectedly created OAuth state' }
