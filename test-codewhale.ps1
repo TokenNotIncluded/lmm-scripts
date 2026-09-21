@@ -28,8 +28,9 @@ try {
   [IO.File]::WriteAllText($driver, ('$forwarded = @(' + $arguments + '); & ' + (Literal $wrapper) + ' @forwarded; exit $LASTEXITCODE'))
   & $engine -NoProfile -ExecutionPolicy Bypass -File $driver
   Assert-True ($LASTEXITCODE -eq 17) 'Child exit status was lost'
-  $received = @(Get-Content -LiteralPath $receipt -Raw | ConvertFrom-Json)
-  Assert-True ($received.Count -eq $expected.Count) 'Argument count changed'
+  # Do not nest the JSON array with @(): PS 5.1 emits it as one pipeline object.
+  $received = Get-Content -LiteralPath $receipt -Raw | ConvertFrom-Json
+  Assert-True ($received.Count -eq $expected.Count) "Argument count changed: expected $($expected.Count), received $($received.Count)"
   for ($i=0; $i -lt $expected.Count; $i++) { Assert-True ($received[$i] -ceq $expected[$i]) "Argument $i changed" }
 
   # A detached download must be rejected before its contents execute.
