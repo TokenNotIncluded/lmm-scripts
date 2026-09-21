@@ -21,7 +21,8 @@ try {
   $env:LMM_SCRIPT_TEST_RECEIPT = $receipt
   [IO.File]::WriteAllText($helper, 'import fs from "node:fs"; fs.writeFileSync(process.env.LMM_SCRIPT_TEST_RECEIPT, JSON.stringify(process.argv.slice(2))); process.exit(17);')
   $task = 'literal "quoted" $(not-a-command); & | C:\path with spaces\'
-  $expected = @('run', '--model', 'lmm:ZGVmYXVsdA:bW9kZWw', '--', 'exec', $task)
+  # Empty arguments and backslashes next to quotes must survive the native boundary too.
+  $expected = @('run', '--model', 'lmm:ZGVmYXVsdA:bW9kZWw', '--', 'exec', $task, '', 'a\"b', 'C:\trailing\\')
   $driver = Join-Path $work 'driver.ps1'
   $arguments = ($expected | ForEach-Object { Literal $_ }) -join ','
   # The extra driver must splat the argument array and propagate the nested script's exit.
