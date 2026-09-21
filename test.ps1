@@ -33,6 +33,7 @@ function official-pi {
   if ($args[0] -eq '--version') { $env:PI_TEST_VERSION }
   else { Write-Output ($args -join '|') }
 }
+function Write-Warning { param($Message) Write-Output $Message }
 function npm.cmd { throw 'must not replace the official installer with npm' }
 function pi.cmd { throw 'must not invoke stale pi on PATH' }
 '@
@@ -40,7 +41,7 @@ Check 'pi.ps1' $piSetup 0 'install\|npm:@tokennotincluded/pi-lmm-provider'
 Check 'pi.ps1' ($piSetup+"`n`$env:PI_TEST_INSTALLER='Write-Output cancelled; exit 0'") 0 'cancelled'
 Check 'pi.ps1' ($piSetup+"`n`$env:PI_TEST_INSTALLER='Write-Output failed; exit 9'") 9 'failed'
 Check 'pi.ps1' ($piSetup+"`n`$env:PI_TEST_VERSION='0.86.1'; function official-pi { if (`$args[0] -ne '--version') { throw 'unsupported plugin must not run' }; `$env:PI_TEST_VERSION }") 0 'plugin skipped'
-Check 'pi.ps1' ($piSetup+"`nfunction official-pi { Write-Output broken; `$global:LASTEXITCODE=8 }") 8 'broken'
+Check 'pi.ps1' ($piSetup+"`nfunction official-pi { if (`$args[0] -ne '--version') { throw 'plugin must not run' }; `$global:LASTEXITCODE=8 }") 8 ''
 Check 'pi.ps1' ($piSetup+"`nfunction official-pi { if (`$args[0] -eq '--version') { '0.85.1'; `$global:LASTEXITCODE=0 } else { Write-Output plugin-failed; `$global:LASTEXITCODE=7 } }") 7 'plugin-failed'
 Check 'pi.ps1' "function Invoke-RestMethod { throw 'download-failed' }" 1 'download-failed'
 $npmFailure = @'
