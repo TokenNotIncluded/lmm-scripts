@@ -18,7 +18,7 @@ while true; do
   if [[ -n ${BASH_SOURCE[0]:-} && -f $dir/$tool.sh ]]; then
     bash "$dir/$tool.sh" "$@" </dev/tty || printf 'Installation failed.\n' >&2
   else
-    script=$(curl -fsSL "https://raw.githubusercontent.com/TokenNotIncluded/lmm-scripts/64e9c6ea048de43312c9579e8bdd05c9bf84d9c7/$tool.sh") || continue
+    script=$(curl -fsSL "https://raw.githubusercontent.com/TokenNotIncluded/lmm-scripts/bd0a81de99d28c0ed5701cf290dade1e124dcecd/$tool.sh") || continue
     bash -c "$script" -- "$@" </dev/tty || printf 'Installation failed.\n' >&2
   fi
 done
