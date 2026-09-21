@@ -57,3 +57,5 @@ function Invoke-WebRequest {
   Remove-Item Env:LMM_SCRIPT_TEST_MARKER -ErrorAction SilentlyContinue
   Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
 }
+# The nonzero child status above is expected and asserted, not a suite failure.
+exit 0
