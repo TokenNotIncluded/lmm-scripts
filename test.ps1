@@ -5,6 +5,7 @@ foreach ($file in Get-ChildItem $PSScriptRoot -Filter '*.ps1') {
   if ($errors.Count) { throw ($errors | Out-String) }
 }
 $engine = (Get-Process -Id $PID).Path
+$checks = 0
 function Check([string]$File,[string]$Setup,[int]$Code,[string]$Pattern,[string]$Arguments='') {
   $ErrorActionPreference = 'Continue'
   $path=(Join-Path $PSScriptRoot $File).Replace("'","''")
@@ -12,20 +13,45 @@ function Check([string]$File,[string]$Setup,[int]$Code,[string]$Pattern,[string]
   $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($codeText))
   $output = & $engine -NoProfile -NonInteractive -EncodedCommand $encoded 2>&1 | Out-String
   if ($LASTEXITCODE -ne $Code -or $output -notmatch $Pattern) { throw "$File expected exit $Code / $Pattern, received $LASTEXITCODE : $output" }
+  $script:checks++
 }
+$piSetup = @'
+$env:PI_TEST_INSTALLER = 'function Get-PiBinDir { "official-bin" }; $env:PI_VENDOR_ENV="ready"'
+$env:PI_TEST_VERSION = '0.85.1'
+function Invoke-RestMethod {
+  if ($args[0] -ne 'https://pi.dev/install.ps1') { throw 'wrong installer URL' }
+  return $env:PI_TEST_INSTALLER
+}
+function Join-Path {
+  param($Path,$ChildPath)
+  if ($Path -ne 'official-bin' -or $ChildPath -ne 'pi.cmd') { throw 'wrong installed path' }
+  return 'official-pi'
+}
+function official-pi {
+  if ($env:PI_VENDOR_ENV -ne 'ready') { throw 'official environment lost' }
+  $global:LASTEXITCODE=0
+  if ($args[0] -eq '--version') { $env:PI_TEST_VERSION }
+  else { Write-Output ($args -join '|') }
+}
+function npm.cmd { throw 'must not replace the official installer with npm' }
+function pi.cmd { throw 'must not invoke stale pi on PATH' }
+'@
+Check 'pi.ps1' $piSetup 0 'install\|npm:@tokennotincluded/pi-lmm-provider'
+Check 'pi.ps1' ($piSetup+"`n`$env:PI_TEST_INSTALLER='Write-Output cancelled; exit 0'") 0 'cancelled'
+Check 'pi.ps1' ($piSetup+"`n`$env:PI_TEST_INSTALLER='Write-Output failed; exit 9'") 9 'failed'
+Check 'pi.ps1' ($piSetup+"`n`$env:PI_TEST_VERSION='0.86.1'; function official-pi { if (`$args[0] -ne '--version') { throw 'unsupported plugin must not run' }; `$env:PI_TEST_VERSION }") 0 'plugin skipped'
+Check 'pi.ps1' ($piSetup+"`nfunction official-pi { Write-Output broken; `$global:LASTEXITCODE=8 }") 8 'broken'
+Check 'pi.ps1' ($piSetup+"`nfunction official-pi { if (`$args[0] -eq '--version') { '0.85.1'; `$global:LASTEXITCODE=0 } else { Write-Output plugin-failed; `$global:LASTEXITCODE=7 } }") 7 'plugin-failed'
+Check 'pi.ps1' "function Invoke-RestMethod { throw 'download-failed' }" 1 'download-failed'
 $npmFailure = @'
 function npm.cmd { Write-Output 'npm failed'; $global:LASTEXITCODE=9 }
-function pi.cmd { throw 'plugin must not run' }
 function dsh.cmd { throw 'plugin must not run' }
 '@
-Check 'pi.ps1' $npmFailure 9 'npm failed'
 Check 'dsh.ps1' $npmFailure 9 'npm failed'
 $npmSuccess = @'
 function npm.cmd { Write-Output ($args -join '|'); $global:LASTEXITCODE=0 }
-function pi.cmd { Write-Output ($args -join '|'); $global:LASTEXITCODE=0 }
 function dsh.cmd { Write-Output ($args -join '|'); $global:LASTEXITCODE=0 }
 '@
-Check 'pi.ps1' $npmSuccess 0 'install\|npm:@tokennotincluded/pi-lmm-provider'
 Check 'dsh.ps1' $npmSuccess 0 'plugin\|--profile\|headless' '-Profile headless'
 $upstream = @'
 function Invoke-RestMethod { return 'param([string]$Version) Write-Output "upstream:$Version"' }
@@ -53,4 +79,4 @@ function Start-Process {
 '@
 Check 'cc-switch.ps1' ($msi+"`n`$env:PROCESSOR_ARCHITECTURE='AMD64'") 0 'https://test.invalid/x64'
 Check 'cc-switch.ps1' ($msi+"`n`$env:PROCESSOR_ARCHITECTURE='ARM64'") 0 'https://test.invalid/arm64'
-Write-Output 'PowerShell syntax and 11 command-contract checks passed.'
+Write-Output "PowerShell syntax and $checks command-contract checks passed."
