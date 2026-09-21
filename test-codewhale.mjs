@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, symlinkSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -84,9 +84,9 @@ test('out-of-range and nonnumeric choices never silently select a model', () => 
 });
 test('npm CLI is resolved as JS rather than executing a Windows command shim', t => {
   const f = fixture(t);
-  assert.equal(npmCLI(f.env), f.npmFile);
+  assert.equal(npmCLI(f.env), realpathSync(f.npmFile));
   writeFileSync(join(f.bin, 'npm.cmd'), '@exit /b 99');
-  assert.equal(npmCLI({ PATH: f.bin }, 'win32'), f.npmFile);
+  assert.equal(npmCLI({ PATH: f.bin }, 'win32'), realpathSync(f.npmFile));
 });
 test('missing npm has an actionable error', () => {
   assert.throws(() => npmCLI({ PATH: '' }), /npm was not found/);
