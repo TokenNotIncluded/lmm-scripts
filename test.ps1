@@ -11,7 +11,7 @@ function Check([string]$File,[string]$Setup,[int]$Code,[string]$Pattern,[string]
   $path=(Join-Path $PSScriptRoot $File).Replace("'","''")
   $codeText = "`$ErrorActionPreference='Stop'; `$LASTEXITCODE=0; $Setup`n& '$path' $Arguments; exit `$LASTEXITCODE"
   $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($codeText))
-  $output = & $engine -NoProfile -NonInteractive -EncodedCommand $encoded 2>&1 | Out-String
+  $output = & $engine -NoProfile -NonInteractive -EncodedCommand $encoded *>&1 | Out-String
   if ($LASTEXITCODE -ne $Code -or $output -notmatch $Pattern) { throw "$File expected exit $Code / $Pattern, received $LASTEXITCODE : $output" }
   $script:checks++
 }
