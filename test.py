@@ -227,13 +227,14 @@ class InstallTests(unittest.TestCase):
         code=(ROOT/'menu.sh').read_text().split('while true; do')[0]+'printf "%s\\n" "${tools[@]}"\n'
         result=subprocess.run([shutil.which('bash'),'-c',code],env=self.env|{'TERMUX_VERSION':'test'},text=True,capture_output=True,timeout=10)
         self.assertEqual(result.returncode,0,result.stderr)
-        self.assertEqual(result.stdout.splitlines(),['pi','dsh','lmm','codex','claude-code'])
+        self.assertEqual(result.stdout.splitlines(),['pi','dsh','lmm','codex','claude-code','codewhale'])
 
     def test_flat_layout_and_size_budget(self):
         for path in ('templates','tools','docs','versions.json','generate.py'):
             self.assertFalse((ROOT/path).exists())
-        scripts=[*ROOT.glob('*.sh'),*(f for f in ROOT.glob('*.ps1') if f.name!='test.ps1')]
-        self.assertLess(sum(len(f.read_bytes()) for f in scripts),14000)
+        scripts=[f for pattern in ('*.sh','*.ps1','*.mjs') for f in ROOT.glob(pattern) if not f.name.startswith('test')]
+        # Include the shared Codewhale implementation in the explicit size budget.
+        self.assertLess(sum(len(f.read_bytes()) for f in scripts),32000)
         for file in scripts:
             text=file.read_text()
             self.assertNotRegex(text,r'npmmirror|rank_urls|LMM_NETWORK|LMM_RETRIES|LMM_COMMAND_TIMEOUT|configure_npm')
