@@ -54,10 +54,14 @@ class MenuTests(unittest.TestCase):
                 if done:
                     status = value
                     break
-            if status is None:
+            # macOS may close the PTY before waitpid reports the exited child.
+            # Reap within the original deadline rather than treating EOF as a hang.
+            while status is None and time.monotonic() < deadline:
                 done, value = os.waitpid(pid, os.WNOHANG)
                 if done:
                     status = value
+                    break
+                time.sleep(0.01)
             if status is None:
                 os.kill(pid, signal.SIGKILL)
                 os.waitpid(pid, 0)

@@ -1,5 +1,5 @@
 $ErrorActionPreference = 'Stop'
-$node = (Get-Command node -CommandType Application -ErrorAction Stop).Source
+$node = (Get-Command node -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
 $nodeVersion = & $node -p 'process.versions.node'
 if ($LASTEXITCODE) { exit $LASTEXITCODE }
 if ([int]($nodeVersion.Split('.')[0]) -lt 22) { throw 'Node.js 22+ with npm is required.' }
