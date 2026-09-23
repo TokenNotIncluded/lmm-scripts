@@ -17,7 +17,7 @@ function Check([string]$File,[string]$Setup,[int]$Code,[string]$Pattern,[string]
 }
 $piSetup = @'
 $env:PI_TEST_INSTALLER = 'function Get-PiBinDir { "official-bin" }; $env:PI_VENDOR_ENV="ready"'
-$env:PI_TEST_VERSION = '0.85.1'
+$env:PI_TEST_VERSION = '0.87.1'
 function Invoke-RestMethod {
   if ($args[0] -ne 'https://pi.dev/install.ps1') { throw 'wrong installer URL' }
   return $env:PI_TEST_INSTALLER
@@ -34,15 +34,18 @@ function official-pi {
   else { Write-Output ($args -join '|') }
 }
 function Write-Warning { param($Message) Write-Output $Message }
-function npm.cmd { throw 'must not replace the official installer with npm' }
+function npm.cmd {
+  if ($env:LMM_PI_BIN -ne 'official-pi') { throw 'official Pi path was not forwarded' }
+  Write-Output ($args -join '|'); $global:LASTEXITCODE=0
+}
 function pi.cmd { throw 'must not invoke stale pi on PATH' }
 '@
-Check 'pi.ps1' $piSetup 0 'install\|npm:@tokennotincluded/pi-lmm-provider'
+Check 'pi.ps1' $piSetup 0 'lmm-pi-provider\|npm:@tokennotincluded/pi-lmm-provider'
 Check 'pi.ps1' ($piSetup+"`n`$env:PI_TEST_INSTALLER='Write-Output cancelled; exit 0'") 0 'cancelled'
 Check 'pi.ps1' ($piSetup+"`n`$env:PI_TEST_INSTALLER='Write-Output failed; exit 9'") 9 'failed'
-Check 'pi.ps1' ($piSetup+"`n`$env:PI_TEST_VERSION='0.86.1'; function official-pi { if (`$args[0] -ne '--version') { throw 'unsupported plugin must not run' }; `$env:PI_TEST_VERSION }") 0 'plugin skipped'
+Check 'pi.ps1' ($piSetup+"`n`$env:PI_TEST_VERSION='0.88.0'; function official-pi { if (`$args[0] -ne '--version') { throw 'unsupported plugin must not run' }; `$env:PI_TEST_VERSION }") 0 'plugin skipped'
 Check 'pi.ps1' ($piSetup+"`nfunction official-pi { if (`$args[0] -ne '--version') { throw 'plugin must not run' }; `$global:LASTEXITCODE=8 }") 8 ''
-Check 'pi.ps1' ($piSetup+"`nfunction official-pi { if (`$args[0] -eq '--version') { '0.85.1'; `$global:LASTEXITCODE=0 } else { Write-Output plugin-failed; `$global:LASTEXITCODE=7 } }") 7 'plugin-failed'
+Check 'pi.ps1' ($piSetup+"`nfunction npm.cmd { Write-Output plugin-failed; `$global:LASTEXITCODE=7 }") 7 'plugin-failed'
 Check 'pi.ps1' "function Invoke-RestMethod { throw 'download-failed' }" 1 'download-failed'
 $npmFailure = @'
 function npm.cmd { Write-Output 'npm failed'; $global:LASTEXITCODE=9 }

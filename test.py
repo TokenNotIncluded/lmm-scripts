@@ -29,7 +29,7 @@ if name == 'curl':
             + "assert os.environ.get('PI_VENDOR_ENV') == 'ready'\n"
             + "with open(os.environ['LOG'], 'a') as f: f.write(json.dumps(['official-pi', sys.argv[1:]])+'\\n')\n"
             + "if sys.argv[1:] == ['--version']:\n"
-            + " print(os.environ.get('PI_VERSION', '0.85.1')); sys.exit(int(os.environ.get('PI_VERSION_EXIT', '0')))\n"
+            + " print(os.environ.get('PI_VERSION', '0.87.1')); sys.exit(int(os.environ.get('PI_VERSION_EXIT', '0')))\n"
             + "sys.exit(int(os.environ.get('COMMAND_EXIT', '0')))\n")
         entry.chmod(0o755)
         print('set -eu\nexport PI_VENDOR_ENV=ready\npi_installed_path() { printf "%s" "$HOME/official pi\'s bin/pi"; }')
@@ -61,7 +61,10 @@ elif name == 'tar':
 elif name == 'proot-distro':
     # Record the actual guest invocation; do not fake an Android binary.
     sys.exit(0)
-elif name == 'npm': sys.exit(int(os.environ.get('NPM_EXIT','0')))
+elif name == 'npm':
+    if args[:1] == ['exec']:
+        assert os.environ['LMM_PI_BIN'].endswith("official pi's bin/pi")
+    sys.exit(int(os.environ.get('NPM_EXIT','0')))
 elif name == 'pkg': sys.exit(int(os.environ.get('PKG_EXIT','0')))
 elif name == 'sudo': os.execvp(args[0],args)
 else: sys.exit(int(os.environ.get('COMMAND_EXIT','0')))
@@ -104,7 +107,7 @@ class InstallTests(unittest.TestCase):
         self.assertEqual(self.calls(),[
             ['curl',['-fsSL','https://pi.dev/install.sh']],
             ['official-pi',['--version']],
-            ['official-pi',['install','npm:@tokennotincluded/pi-lmm-provider@0.1.0-alpha.1']],
+            ['npm',['exec','--yes','--package=@tokennotincluded/pi-lmm-provider@0.1.0-alpha.2','--','lmm-pi-provider','npm:@tokennotincluded/pi-lmm-provider@0.1.0-alpha.2']],
         ])
 
     def test_pi_official_failure_or_cancellation_stops_plugin(self):
@@ -115,14 +118,14 @@ class InstallTests(unittest.TestCase):
                 self.assertTrue(all(name=='curl' for name,_ in self.calls()))
                 shutil.rmtree(self.home/"official pi's bin")
 
-    def test_pi_new_host_is_not_downgraded_for_old_plugin(self):
-        result=self.run_script('pi.sh',PI_VERSION='0.86.1')
+    def test_pi_unsupported_host_is_not_downgraded_for_plugin(self):
+        result=self.run_script('pi.sh',PI_VERSION='0.88.0')
         self.assertEqual(result.returncode,0,result.stderr)
         self.assertIn('plugin skipped',result.stderr)
         self.assertEqual([name for name,_ in self.calls()],['curl','official-pi'])
 
     def test_pi_version_and_plugin_failures_propagate(self):
-        for env in ({'PI_VERSION_EXIT':'8'},{'COMMAND_EXIT':'7'}):
+        for env in ({'PI_VERSION_EXIT':'8'},{'NPM_EXIT':'7'}):
             result=self.run_script('pi.sh',**env)
             self.assertEqual(result.returncode,int(next(iter(env.values()))),result.stderr)
             shutil.rmtree(self.home/"official pi's bin")
@@ -241,7 +244,7 @@ class InstallTests(unittest.TestCase):
             self.assertNotIn('@MENU_REV@',text)
             self.assertNotIn('@DESKTOP_REV@',text)
         for name in ('codex','claude-code','pi','dsh'):
-            self.assertLessEqual(len((ROOT/f'{name}.sh').read_text().splitlines()),12 if name=='pi' else 10)
+            self.assertLessEqual(len((ROOT/f'{name}.sh').read_text().splitlines()),13 if name=='pi' else 10)
         for ext in ('sh','ps1'):
             text=(ROOT/f'pi.{ext}').read_text()
             self.assertIn(f'https://pi.dev/install.{ext}',text)

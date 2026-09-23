@@ -15,8 +15,8 @@ irm https://raw.githubusercontent.com/TokenNotIncluded/lmm-scripts/main/menu.ps1
 
 | 文件名（`.sh` / `.ps1`） | 安装方式 | 启动 |
 |---|---|---|
-| `pi` | `pi.dev/install.sh` / `install.ps1`，保留官方交互和依赖处理 | `pi`，然后 `/login` |
-| `dsh` | npm + pnpm，加 LMM 插件；默认 web profile | `dsh web` |
+| `pi` | 官方安装器安装 Pi，再通过 npm 的 LMM 安装入口清理重复来源 | `pi`，然后 `/login` |
+| `dsh` | npm + pnpm，从 npm 安装 LMM 插件；默认 web profile | `dsh web` |
 | `codex` | 官方原生安装器，参数直接传给官方 | `codex` |
 | `claude-code` | 官方原生安装器，参数直接传给官方 | `claude` |
 | `cc-switch` | Linux 发行包/AUR，macOS Homebrew，Windows 官方 MSI | 桌面应用 |
@@ -24,7 +24,7 @@ irm https://raw.githubusercontent.com/TokenNotIncluded/lmm-scripts/main/menu.ps1
 | `lmm` | 0.1.0 预览版发行包；另支持 `--from-source` / `-FromSource` | 安装结束打印的完整路径 |
 | `codewhale` | 官方 npm 安装 + 固定版本 LMM OAuth 适配器 | `bash codewhale.sh run` / `.\codewhale.ps1 run` |
 
-Pi 的版本、Node、安装位置、权限和 Windows Git Bash 交给官方安装器。官方正常安装后，才从它选出的安装路径接着装 LMM 插件；取消或卸载不继续。现有 LMM alpha 只验证过 Pi 0.85.1，其他版本会明确跳过插件，不偷偷降级宿主。DSH 的宿主和插件继续固定已适配版本；其当前官方 README 使用 npx，没有现行的独立安装脚本，不能拿归档记录中的旧脚本替代。
+Pi 的版本、安装位置、权限和 Windows Git Bash 交给官方安装器。官方正常安装后，脚本用 npm 运行 LMM 插件的来源切换入口，并把官方安装器选出的 Pi 路径传给它。该入口先安装 npm 版本，成功后只移除同一插件在当前项目和用户配置中的 Git、本地等其他来源；失败时保留旧来源。LMM alpha 支持 Pi 0.86.1 至 0.87.x，其他版本明确跳过插件。安装 LMM 插件另需 Node.js 22.19+ 和 npm。DSH 的宿主继续固定已适配版本，LMM 插件改从 npm 安装；其当前官方 README 使用 npx，没有现行的独立安装脚本，不能拿归档记录中的旧脚本替代。
 
 原有安装器不写供应商配置、不登录账号、不启用系统代理或 TUN。Codewhale 默认 `setup` 会引导用户在浏览器确认 OAuth；`install` 只安装、不登录。两者都不覆盖原配置，见 [Codewhale 安装与配置](CODEWHALE.md)。
 
@@ -34,7 +34,7 @@ Pi 的版本、Node、安装位置、权限和 Windows Git Bash 交给官方安�
 
 ## 环境
 
-Unix 入口需要 Bash、curl。Pi 的依赖提示由官方处理；DSH 另需 Node 22.19+（22.x）或 24+、npm；Codewhale LMM 适配器需要 Node 22+ 和 npm。不修改 npm registry。
+Unix 入口需要 Bash、curl。Pi 主程序的依赖提示由官方处理；Pi LMM 插件和 DSH 需要 Node 22.19+（22.x）或 24+、npm；Codewhale LMM 适配器需要 Node 22+ 和 npm。不修改 npm registry。
 
 Codex/Claude 的 Linux、macOS、Windows 安装都用官方脚本，不要求 Node，也不限定 apt 发行版。先满足上游的系统和运行库要求。Alpine 的 Claude 需要 `bash curl libgcc libstdc++ ripgrep`，运行时使用 `USE_BUILTIN_RIPGREP=0 claude`。NixOS 请使用 Nix 包环境，不保证通用二进制可运行。
 
