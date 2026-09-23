@@ -26,6 +26,8 @@ irm https://raw.githubusercontent.com/TokenNotIncluded/lmm-scripts/main/menu.ps1
 
 Pi 的版本、安装位置、权限和 Windows Git Bash 交给官方安装器。官方正常安装后，脚本用 npm 运行 LMM 插件的来源切换入口，并把官方安装器选出的 Pi 路径传给它。该入口先安装 npm 版本，成功后只移除同一插件在当前项目和用户配置中的 Git、本地等其他来源；失败时保留旧来源。LMM alpha 支持 Pi 0.86.1 至 0.87.x，其他版本明确跳过插件。安装 LMM 插件另需 Node.js 22.19+ 和 npm。DSH 的宿主继续固定已适配版本，LMM 插件改从 npm 安装；其当前官方 README 使用 npx，没有现行的独立安装脚本，不能拿归档记录中的旧脚本替代。
 
+`dsh.sh` / `dsh.ps1` 只配置 CLI 的 `web` profile，固定 DSH `0.1.5-rc.2` 和对应插件 `0.1.0-alpha.3`。官方 DSH Desktop `0.1.7-alpha.2` 使用独立的 `desktop` profile，应在桌面端“插件”页安装 `@tokennotincluded/dsh-lmm-provider@0.1.0-alpha.4`；CLI 安装不会进入桌面端。
+
 原有安装器不写供应商配置、不登录账号、不启用系统代理或 TUN。Codewhale 默认 `setup` 会引导用户在浏览器确认 OAuth；`install` 只安装、不登录。两者都不覆盖原配置，见 [Codewhale 安装与配置](CODEWHALE.md)。
 
 ## Codewhale
