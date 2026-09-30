@@ -54,6 +54,6 @@ test('updates the config owning the previous LMM plugin without duplicating acro
 
 test('uses the same config directory override as the OpenCode host', () => {
   assert.equal(configDirectory({OPENCODE_CONFIG_DIR:'/custom/opencode', XDG_CONFIG_HOME:'/other'}, '/home/user'), '/custom/opencode');
-  assert.equal(configDirectory({OPENCODE_CONFIG_DIR:'', XDG_CONFIG_HOME:'/custom'}, '/home/user'), '/custom/opencode');
-  assert.equal(configDirectory({XDG_CONFIG_HOME:''}, '/home/user'), '/home/user/.config/opencode');
+  assert.equal(configDirectory({OPENCODE_CONFIG_DIR:'', XDG_CONFIG_HOME:'/custom'}, '/home/user'), path.join('/custom','opencode'));
+  assert.equal(configDirectory({XDG_CONFIG_HOME:''}, '/home/user'), path.join('/home/user','.config','opencode'));
 });

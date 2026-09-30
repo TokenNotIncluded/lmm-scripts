@@ -8,6 +8,8 @@ import assert from 'node:assert/strict';
 import {npmCli, LAST_TESTED_OPENCODE_VERSION} from './opencode.mjs';
 const root = await mkdtemp(join(tmpdir(), 'lmm-opencode-install-'));
 const env = {...process.env, OPENCODE_CONFIG_DIR:join(root,'config','opencode'), npm_config_prefix: join(root,'npm'), XDG_CONFIG_HOME:join(root,'config'), XDG_DATA_HOME:join(root,'data'), XDG_STATE_HOME:join(root,'state'), XDG_CACHE_HOME:join(root,'cache'), OPENCODE_DISABLE_DEFAULT_PLUGINS:'true'};
+delete env.OPENCODE_CONFIG;
+delete env.OPENCODE_CONFIG_CONTENT;
 let host;
 let logs = '';
 try {
@@ -55,6 +57,6 @@ try {
   assert.ok(loaded.provider.fixture);
   console.log('Real installation, repeat installation, config preservation and native OpenCode OAuth registration passed. No login or inference performed.');
 } finally {
-  if(host&&host.exitCode===null){host.kill('SIGTERM');await Promise.race([new Promise(resolve=>host.once('exit',resolve)),new Promise(resolve=>setTimeout(resolve,3000))]);if(host.exitCode===null)host.kill('SIGKILL');}
+  if(host&&host.exitCode===null){if(process.platform==='win32')spawnSync('taskkill',['/pid',String(host.pid),'/t','/f'],{stdio:'ignore'});else host.kill('SIGTERM');await Promise.race([new Promise(resolve=>host.once('exit',resolve)),new Promise(resolve=>setTimeout(resolve,3000))]);if(host.exitCode===null)host.kill('SIGKILL');}
   await rm(root,{recursive:true,force:true});
 }
