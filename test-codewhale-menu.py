@@ -82,6 +82,13 @@ class MenuTests(unittest.TestCase):
         self.assertIn('8  codewhale', output)
         self.assertIn('SELECTED:codewhale menu', output)
 
+    def test_ninth_option_routes_to_opencode_installer_without_arguments(self):
+        self.stub('opencode')
+        output = self.run_menu(['9', '0'])
+        self.assertIn('9  opencode', output)
+        self.assertIn('SELECTED:opencode ', output)
+        self.assertNotIn('SELECTED:opencode menu', output)
+
     def test_old_numbering_and_argument_contract_are_preserved(self):
         self.stub('pi')
         output = self.run_menu(['1', '0'])
@@ -89,7 +96,7 @@ class MenuTests(unittest.TestCase):
         self.assertNotIn('SELECTED:pi menu', output)
 
     def test_out_of_range_and_overflow_input_return_to_menu(self):
-        output = self.run_menu(['9', '999999999999999999999999999', '-1', '0'])
+        output = self.run_menu(['10', '999999999999999999999999999', '-1', '0'])
         self.assertNotIn('SELECTED:', output)
 
     def test_termux_hides_desktop_apps_and_routes_sixth_option(self):
