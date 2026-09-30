@@ -22,6 +22,7 @@ irm https://raw.githubusercontent.com/TokenNotIncluded/lmm-scripts/main/menu.ps1
 | `cc-switch` | Linux 发行包/AUR，macOS Homebrew，Windows 官方 MSI | 桌面应用 |
 | `clash-verge-rev` | Linux deb/rpm/AUR，macOS Homebrew，Windows WinGet | 桌面应用 |
 | `lmm` | 0.1.0 预览版发行包；另支持 `--from-source` / `-FromSource` | 安装结束打印的完整路径 |
+| `opencode` | 官方 npm 最新 OpenCode + 独立 LMM OAuth 插件 | `opencode`，然后 `/connect` 选择 LMM |
 | `codewhale` | 官方 npm 安装 + 固定版本 LMM OAuth 适配器 | `bash codewhale.sh run` / `.\codewhale.ps1 run` |
 
 Pi 的版本、安装位置、权限和 Windows Git Bash 交给官方安装器。官方正常安装后，脚本用 npm 运行 LMM 插件的来源切换入口，并把官方安装器选出的 Pi 路径传给它。该入口先安装 npm 版本，成功后只移除同一插件在当前项目和用户配置中的 Git、本地等其他来源；失败时保留旧来源。LMM alpha 支持 Pi 0.86.1 至 0.87.x，其他版本明确跳过插件。安装 LMM 插件另需 Node.js 22.19+ 和 npm。DSH 的宿主继续固定已适配版本，LMM 插件改从 npm 安装；其当前官方 README 使用 npx，没有现行的独立安装脚本，不能拿归档记录中的旧脚本替代。
@@ -33,6 +34,14 @@ Pi 的版本、安装位置、权限和 Windows Git Bash 交给官方安装器�
 ## Codewhale
 
 菜单新增第 8 项 `codewhale`（Termux 为第 6 项），进入安装、登录、选模型启动、余额/用量和登出子菜单，原有工具编号不变。可直接运行 `bash codewhale.sh` 或 `.\codewhale.ps1` 完成安装和授权；非交互环境必须显式使用 `install`。需要服务端先部署 `lmm-codewhale` 注册，安装成功不代表生产登录已验证。
+
+## OpenCode
+
+运行 `bash opencode.sh` 或 `.\opencode.ps1` 安装官方最新版 OpenCode（最近验证 **1.18.34**） 和独立仓库 [opencode-lmm-auth](https://github.com/TokenNotIncluded/opencode-lmm-auth) 的固定提交插件。桌面菜单第 9 项提供同一入口；不限制宿主版本更新；不在 Termux 菜单显示。
+
+需要 Node.js 22.19+、npm、tar；下载使用 GitHub 固定提交并校验 SHA-256，npm 单次安装使用官方 registry，不改变用户 registry 设置。插件放入用户 OpenCode 配置目录（支持 `OPENCODE_CONFIG_DIR` 和 `XDG_CONFIG_HOME`），配置中添加 `file:` 插件入口；保留 JSONC 注释、其他插件和供应商配置，修改前备份，重复安装不重复添加。用户已有手动安装的同名插件时会停止并提示先处理重复来源。
+
+安装后重启 OpenCode，运行 `/connect`，选择 **LMM → Sign in with LMM (OAuth)**，在浏览器授权。也可运行 `opencode auth login`。安装器不登录、不保存 API Key、不发起付费请求。服务端需要注册 `lmm-opencode` OAuth 客户端；本地安装与宿主加载验证不代表线上授权、余额和实际模型调用已经通过。
 
 ## 环境
 
@@ -54,10 +63,12 @@ Codex/Claude 使用**已有的 PRoot Linux 环境**，不是 Android 原生二�
 
 旧的 `--network`、`--root`、`--check`、`--update` 等自定义参数已移除；不要继续传入。Codex/Claude 只接受各自官方参数，DSH 可传 profile。旧版 `lmm-tools` 目录不会被删除；从 PATH 中移除旧的 `lmm-tools/bin`，避免旧启动器优先于新安装。配置和账号数据不迁移、不清空。
 
-所有安装代码平铺在根目录；两个 Unix 桌面入口共用 `desktop.sh`，Codewhale 两个平台入口共用 `codewhale.mjs`。本地运行用同目录文件，单独下载运行时用固定 Git 提交获取共用脚本；Codewhale 额外校验 SHA-256。菜单同样固定到完整的安装器提交。不维护生成器或独立哈希清单。
+所有安装代码平铺在根目录；两个 Unix 桌面入口共用 `desktop.sh`，Codewhale 与 OpenCode 两个平台入口分别共用 `codewhale.mjs` 和 `opencode.mjs`。本地运行用同目录文件，单独下载运行时用固定 Git 提交获取共用脚本；Codewhale 额外校验 SHA-256。菜单同样固定到完整的安装器提交。不维护生成器或独立哈希清单。
 
 ## 依据与测试
 
 2026-09-21 核查：[Pi 官网安装入口](https://pi.dev/)（[Shell](https://pi.dev/install.sh) / [PowerShell](https://pi.dev/install.ps1)）· [Codex](https://learn.chatgpt.com/docs/codex/cli) · [Claude Code](https://code.claude.com/docs/en/setup) · [Pi Termux](https://pi.dev/docs/latest/termux) · [DSH 当前 README](https://github.com/deepseek-ai/deepseek-harness/blob/master/README.md) · [DSH 插件](https://deepseek-harness.github.io/deepseek-harness/en/develop/basic/publish) · [CC Switch](https://github.com/farion1231/cc-switch#download--installation) · [Clash Verge Rev](https://www.clashverge.dev/install.html)。LMM 插件适配版本见 [Pi 插件](https://github.com/TokenNotIncluded/pi-lmm-provider) 和 [DSH 插件](https://github.com/TokenNotIncluded/dsh-lmm-provider)。Codewhale 依据和平台限制见 [专用说明](CODEWHALE.md)。
 
 本地检查：`python3 test.py`、`pwsh -NoProfile -File test.ps1`、`shellcheck *.sh`。Codewhale 另有 `node --test test-codewhale.mjs`、`python3 test-codewhale-menu.py`、`pwsh -NoProfile -File test-codewhale.ps1`。CI 另做三平台 CLI 实装和 Debian/Alpine 实装；不把模拟测试当作桌面 GUI、Termux 真机、账号登录或代理功能实测。
+
+OpenCode 检查：`node --test test-opencode.mjs test-opencode-entry.mjs`、`pwsh -NoProfile -File test-opencode.ps1`、`node test-opencode-install.mjs`。最后一项隔离安装两次并启动真实宿主确认 LMM OAuth 注册，不登录或调用模型。三平台 CI 分别验证官方最新宿主与最近验证的基线宿主，安装器始终安装官方最新版。

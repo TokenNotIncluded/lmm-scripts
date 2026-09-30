@@ -1,0 +1,34 @@
+name: OpenCode installer
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        host: [latest, baseline]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '22.19.0'
+      - name: Configuration preservation
+        run: node --test test-opencode.mjs test-opencode-entry.mjs
+      - name: PowerShell entrypoint
+        shell: pwsh
+        run: ./test-opencode.ps1
+      - name: Windows PowerShell 5.1 entrypoint
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: .\test-opencode.ps1
+      - name: Real install and native plugin loading without OAuth or inference
+        env:
+          TEST_OPENCODE_BASELINE: ${{ matrix.host == 'baseline' && 'true' || 'false' }}
+        run: node test-opencode-install.mjs
