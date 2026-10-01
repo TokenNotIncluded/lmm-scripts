@@ -107,7 +107,7 @@ class InstallTests(unittest.TestCase):
         self.assertEqual(self.calls(),[
             ['curl',['-fsSL','https://pi.dev/install.sh']],
             ['official-pi',['--version']],
-            ['npm',['exec','--yes','--package=@tokennotincluded/pi-lmm-provider@0.1.0-alpha.2','--','lmm-pi-provider','npm:@tokennotincluded/pi-lmm-provider@0.1.0-alpha.2']],
+            ['npm',['exec','--yes','--package=@tokennotincluded/pi-lmm-provider@alpha','--','lmm-pi-provider','git:github.com/TokenNotIncluded/pi-lmm-provider']],
         ])
 
     def test_pi_official_failure_or_cancellation_stops_plugin(self):
@@ -118,11 +118,16 @@ class InstallTests(unittest.TestCase):
                 self.assertTrue(all(name=='curl' for name,_ in self.calls()))
                 shutil.rmtree(self.home/"official pi's bin")
 
-    def test_pi_unsupported_host_is_not_downgraded_for_plugin(self):
-        result=self.run_script('pi.sh',PI_VERSION='0.88.0')
-        self.assertEqual(result.returncode,0,result.stderr)
-        self.assertIn('plugin skipped',result.stderr)
-        self.assertEqual([name for name,_ in self.calls()],['curl','official-pi'])
+    def test_pi_latest_and_future_hosts_always_install_current_plugin(self):
+        for version in ('0.88.0', '0.99.2', '1.2.0'):
+            with self.subTest(version=version):
+                result=self.run_script('pi.sh',PI_VERSION=version)
+                self.assertEqual(result.returncode,0,result.stderr)
+                self.assertNotIn('plugin skipped',result.stderr)
+                self.assertEqual([name for name,_ in self.calls()],['curl','official-pi','npm'])
+                self.assertEqual(self.calls()[-1][1][-1], 'git:github.com/TokenNotIncluded/pi-lmm-provider')
+                shutil.rmtree(self.home/"official pi's bin")
+                self.log.write_text('')
 
     def test_pi_version_and_plugin_failures_propagate(self):
         for env in ({'PI_VERSION_EXIT':'8'},{'NPM_EXIT':'7'}):

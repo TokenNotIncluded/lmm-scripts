@@ -40,10 +40,12 @@ function npm.cmd {
 }
 function pi.cmd { throw 'must not invoke stale pi on PATH' }
 '@
-Check 'pi.ps1' $piSetup 0 'lmm-pi-provider\|npm:@tokennotincluded/pi-lmm-provider'
+Check 'pi.ps1' $piSetup 0 'lmm-pi-provider\|git:github.com/TokenNotIncluded/pi-lmm-provider'
 Check 'pi.ps1' ($piSetup+"`n`$env:PI_TEST_INSTALLER='Write-Output cancelled; exit 0'") 0 'cancelled'
 Check 'pi.ps1' ($piSetup+"`n`$env:PI_TEST_INSTALLER='Write-Output failed; exit 9'") 9 'failed'
-Check 'pi.ps1' ($piSetup+"`n`$env:PI_TEST_VERSION='0.88.0'; function official-pi { if (`$args[0] -ne '--version') { throw 'unsupported plugin must not run' }; `$env:PI_TEST_VERSION }") 0 'plugin skipped'
+foreach ($version in @('0.88.0', '0.99.2', '1.2.0')) {
+  Check 'pi.ps1' ($piSetup+"`n`$env:PI_TEST_VERSION='$version'") 0 'lmm-pi-provider\|git:github.com/TokenNotIncluded/pi-lmm-provider'
+}
 Check 'pi.ps1' ($piSetup+"`nfunction official-pi { if (`$args[0] -ne '--version') { throw 'plugin must not run' }; `$global:LASTEXITCODE=8 }") 8 ''
 Check 'pi.ps1' ($piSetup+"`nfunction npm.cmd { Write-Output plugin-failed; `$global:LASTEXITCODE=7 }") 7 'plugin-failed'
 Check 'pi.ps1' "function Invoke-RestMethod { throw 'download-failed' }" 1 'download-failed'
