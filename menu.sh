@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 [[ $# = 0 ]] || { echo 'Usage: bash menu.sh' >&2; exit 2; }
-tools=(pi dsh lmm codex claude-code cc-switch clash-verge-rev codewhale)
+tools=(pi dsh lmm codex claude-code cc-switch clash-verge-rev codewhale opencode)
 if [[ -n ${TERMUX_VERSION:-} || ${PREFIX:-} == */com.termux/files/usr ]]; then tools=(pi dsh lmm codex claude-code codewhale); fi
 dir=$(dirname -- "${BASH_SOURCE[0]:-}")
 while true; do
@@ -18,7 +18,7 @@ while true; do
   if [[ -n ${BASH_SOURCE[0]:-} && -f $dir/$tool.sh ]]; then
     bash "$dir/$tool.sh" "$@" </dev/tty || printf 'Installation failed.\n' >&2
   else
-    script=$(curl -fsSL "https://raw.githubusercontent.com/TokenNotIncluded/lmm-scripts/bd0a81de99d28c0ed5701cf290dade1e124dcecd/$tool.sh") || continue
+    script=$(curl -fsSL "https://raw.githubusercontent.com/TokenNotIncluded/lmm-scripts/873bb8de2d9af00fb2a5fbb592b3da094e665271/$tool.sh") || continue
     bash -c "$script" -- "$@" </dev/tty || printf 'Installation failed.\n' >&2
   fi
 done

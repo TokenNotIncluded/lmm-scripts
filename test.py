@@ -253,8 +253,8 @@ class InstallTests(unittest.TestCase):
         for path in ('templates','tools','docs','versions.json','generate.py'):
             self.assertFalse((ROOT/path).exists())
         scripts=[f for pattern in ('*.sh','*.ps1','*.mjs') for f in ROOT.glob(pattern) if not f.name.startswith('test')]
-        # Include the shared Codewhale implementation in the explicit size budget.
-        self.assertLess(sum(len(f.read_bytes()) for f in scripts),32000)
+        # Include both shared Codewhale and OpenCode implementations in the size budget.
+        self.assertLess(sum(len(f.read_bytes()) for f in scripts),48000)
         for file in scripts:
             text=file.read_text()
             self.assertNotRegex(text,r'npmmirror|rank_urls|LMM_NETWORK|LMM_RETRIES|LMM_COMMAND_TIMEOUT|configure_npm')
