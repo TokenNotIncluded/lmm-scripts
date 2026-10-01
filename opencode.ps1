@@ -19,8 +19,8 @@ try {
     $work = Join-Path ([IO.Path]::GetTempPath()) ('lmm-opencode-' + [guid]::NewGuid())
     New-Item -ItemType Directory -Path $work | Out-Null
     $helper = Join-Path $work 'opencode.mjs'
-    Invoke-WebRequest -UseBasicParsing 'https://raw.githubusercontent.com/TokenNotIncluded/lmm-scripts/e2efbe13fd4e8c0cb9d31ed95ae6d432415aed25/opencode.mjs' -OutFile $helper
-    if ((Get-FileHash -LiteralPath $helper -Algorithm SHA256).Hash -ne 'ded76c114f7c8a692c9d7fa7828828b86ad7d0591aa01fd19be1c2ceecfd95a4') {
+    Invoke-WebRequest -UseBasicParsing 'https://raw.githubusercontent.com/TokenNotIncluded/lmm-scripts/911e25385acaf7016e808bb0d5587301125061f5/opencode.mjs' -OutFile $helper
+    if ((Get-FileHash -LiteralPath $helper -Algorithm SHA256).Hash -ne '94f8966afd70c0218fb86898040ea25f1dbbdbc42a69e388adbebee8399ae31a') {
       throw 'OpenCode setup script checksum mismatch; nothing was executed.'
     }
   }
