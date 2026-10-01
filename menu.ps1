@@ -19,7 +19,7 @@ try {
       if ($PSScriptRoot -and (Test-Path (Join-Path $PSScriptRoot $name))) {
         $path = Join-Path $PSScriptRoot $name
       } else {
-        Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/TokenNotIncluded/lmm-scripts/4f7893f045262f15c9913e0e58e3e354735216c2/$name" -OutFile $path
+        Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/TokenNotIncluded/lmm-scripts/873bb8de2d9af00fb2a5fbb592b3da094e665271/$name" -OutFile $path
       }
       & (Get-Process -Id $PID).Path -NoProfile -ExecutionPolicy Bypass -File $path @installerArgs
       if ($LASTEXITCODE) { Write-Warning "Installer exited with $LASTEXITCODE" }
