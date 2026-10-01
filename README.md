@@ -16,7 +16,7 @@ irm https://raw.githubusercontent.com/TokenNotIncluded/lmm-scripts/main/menu.ps1
 | 文件名（`.sh` / `.ps1`） | 安装方式 | 启动 |
 |---|---|---|
 | `pi` | 官方安装器安装 Pi，再通过 npm 的 LMM 安装入口清理重复来源 | `pi`，然后 `/login` |
-| `dsh` | npm + pnpm，从 npm 安装 LMM 插件；默认 web profile | `dsh web` |
+| `dsh` | npm + pnpm，安装当前 GitHub Release 的 LMM 插件；默认 web profile | `dsh web` |
 | `codex` | 官方原生安装器，参数直接传给官方 | `codex` |
 | `claude-code` | 官方原生安装器，参数直接传给官方 | `claude` |
 | `cc-switch` | Linux 发行包/AUR，macOS Homebrew，Windows 官方 MSI | 桌面应用 |
