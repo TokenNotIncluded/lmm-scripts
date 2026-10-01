@@ -16,7 +16,7 @@ irm https://raw.githubusercontent.com/TokenNotIncluded/lmm-scripts/main/menu.ps1
 | 文件名（`.sh` / `.ps1`） | 安装方式 | 启动 |
 |---|---|---|
 | `pi` | 官方安装器安装 Pi，再通过 npm 的 LMM 安装入口清理重复来源 | `pi`，然后 `/login` |
-| `dsh` | npm + pnpm，从 npm 安装 LMM 插件；默认 web profile | `dsh web` |
+| `dsh` | npm + pnpm，安装当前 GitHub Release 的 LMM 插件；默认 web profile | `dsh web` |
 | `codex` | 官方原生安装器，参数直接传给官方 | `codex` |
 | `claude-code` | 官方原生安装器，参数直接传给官方 | `claude` |
 | `cc-switch` | Linux 发行包/AUR，macOS Homebrew，Windows 官方 MSI | 桌面应用 |
@@ -27,9 +27,9 @@ irm https://raw.githubusercontent.com/TokenNotIncluded/lmm-scripts/main/menu.ps1
 
 Pi 主程序通过官方最新安装器安装；脚本用 npm 的 `@alpha` 入口执行 LMM 插件来源切换，实际安装 GitHub 最新 `main`。入口先确认安装成功，再清理同插件的其他来源；保留无关扩展，失败时保留旧来源。不设 Pi 宿主版本上限。安装 LMM 插件另需 Node.js 22.19+ 和 npm。Pi 的安装位置、权限和 Windows Git Bash 仍由官方安装器处理。
 
-DSH 的宿主继续固定已适配版本，LMM 插件改从 npm 安装；其当前官方 README 使用 npx，没有现行的独立安装脚本，不能拿归档记录中的旧脚本替代。
+DSH 安装官方 npm `latest` 宿主和 pnpm，LMM 插件安装当前 GitHub Release 的已构建包；其当前官方 README 使用 npx，没有现行的独立安装脚本，不能拿归档记录中的旧脚本替代。
 
-`dsh.sh` / `dsh.ps1` 只配置 CLI 的 `web` profile，固定 DSH `0.1.5-rc.2` 和对应插件 `0.1.0-alpha.3`。官方 DSH Desktop `0.1.7-alpha.2` 使用独立的 `desktop` profile，应在桌面端“插件”页安装 `@tokennotincluded/dsh-lmm-provider@0.1.0-alpha.4`；CLI 安装不会进入桌面端。
+`dsh.sh` / `dsh.ps1` 默认配置 CLI 的 `web` profile，可传入其他 profile。宿主使用官方 `latest`，插件通过 GitHub 当前 Release 解析版本化下载链接，避免安装过时 npm 预览包或缺少构建文件的源码。最新插件已验证官方 DSH `0.2.0-rc.2`，此版本是验证基线，没有人为上限。官方 DSH Desktop `0.1.7-alpha.2` 使用独立的 `desktop` profile，应在桌面端“插件”页安装 `@tokennotincluded/dsh-lmm-provider@0.1.0-alpha.4`；CLI 安装不会进入桌面端。
 
 原有安装器不写供应商配置、不登录账号、不启用系统代理或 TUN。Codewhale 默认 `setup` 会引导用户在浏览器确认 OAuth；`install` 只安装、不登录。两者都不覆盖原配置，见 [Codewhale 安装与配置](CODEWHALE.md)。
 

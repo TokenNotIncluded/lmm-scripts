@@ -39,6 +39,9 @@ if name == 'curl':
         print('printf "%s\\n" "$@" > "$HOME/received-args"')
     elif url.endswith('/desktop.sh'):
         print(Path(os.environ['PROJECT'], 'desktop.sh').read_text())
+    elif url == 'https://github.com/TokenNotIncluded/dsh-lmm-provider/releases/latest':
+        if os.environ.get('NO_ASSET'): sys.exit(22)
+        print(os.environ.get('DSH_ASSET_URL','https://github.com/TokenNotIncluded/dsh-lmm-provider/releases/tag/v0.1.0-alpha.5'))
     elif '/releases/latest' in url:
         print(json.dumps({'assets': [] if os.environ.get('NO_ASSET') else [
             {'name': 'Tool-amd64.deb', 'browser_download_url': 'https://github.com/official/tool.deb'},
@@ -79,7 +82,7 @@ class InstallTests(unittest.TestCase):
         self.log = self.home/'commands.jsonl'
         self.log.touch()
         # Keep host package managers out of simulated platform tests.
-        for name in ('bash','sh','dirname','mktemp','rm','mkdir','install'):
+        for name in ('bash','sh','dirname','mktemp','rm','mkdir','install','node'):
             os.symlink(shutil.which(name), self.bin/name)
         for name in ('curl','npm','pi','dsh','uname','jq','tar','proot-distro','brew','cargo','sudo','pkg'):
             self.stub(name)
@@ -148,7 +151,16 @@ class InstallTests(unittest.TestCase):
 
     def test_dsh_keeps_documented_commands_and_lmm_plugin(self):
         self.assertEqual(self.run_script('dsh.sh','headless').returncode,0)
-        self.assertEqual(self.calls()[-1][1][:3],['plugin','--profile','headless'])
+        self.assertEqual(self.calls()[0], ['npm',['install','-g','@deepseek-ai/dsh@latest','pnpm@latest']])
+        self.assertEqual(self.calls()[-1], ['dsh',['plugin','--profile','headless','add','https://github.com/TokenNotIncluded/dsh-lmm-provider/releases/download/v0.1.0-alpha.5/dsh-lmm-provider.tgz','--ignore-scripts']])
+
+    def test_dsh_missing_release_does_not_install_plugin(self):
+        self.assertNotEqual(self.run_script('dsh.sh',NO_ASSET='1').returncode,0)
+        self.assertTrue(all(name!='dsh' for name,_ in self.calls()))
+
+    def test_dsh_rejects_foreign_release_urls(self):
+        self.assertNotEqual(self.run_script('dsh.sh',DSH_ASSET_URL='https://evil.invalid/plugin.tgz').returncode,0)
+        self.assertTrue(all(name!='dsh' for name,_ in self.calls()))
 
     def test_npm_failure_never_installs_plugin(self):
         self.assertEqual(self.run_script('dsh.sh',NPM_EXIT='9').returncode,9)
@@ -249,7 +261,7 @@ class InstallTests(unittest.TestCase):
             self.assertNotIn('@MENU_REV@',text)
             self.assertNotIn('@DESKTOP_REV@',text)
         for name in ('codex','claude-code','pi','dsh'):
-            self.assertLessEqual(len((ROOT/f'{name}.sh').read_text().splitlines()),13 if name=='pi' else 10)
+            self.assertLessEqual(len((ROOT/f'{name}.sh').read_text().splitlines()),20 if name=='dsh' else 13 if name=='pi' else 10)
         for ext in ('sh','ps1'):
             text=(ROOT/f'pi.{ext}').read_text()
             self.assertIn(f'https://pi.dev/install.{ext}',text)
