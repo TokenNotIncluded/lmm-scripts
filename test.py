@@ -127,6 +127,7 @@ class InstallTests(unittest.TestCase):
                 self.assertEqual([name for name,_ in self.calls()],['curl','official-pi','npm'])
                 self.assertEqual(self.calls()[-1][1][-1], 'git:github.com/TokenNotIncluded/pi-lmm-provider')
                 shutil.rmtree(self.home/"official pi's bin")
+                self.log.write_text('')
 
     def test_pi_version_and_plugin_failures_propagate(self):
         for env in ({'PI_VERSION_EXIT':'8'},{'NPM_EXIT':'7'}):
