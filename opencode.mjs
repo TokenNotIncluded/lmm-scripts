@@ -9,9 +9,61 @@ import {pathToFileURL} from 'node:url';
 import {spawnSync} from 'node:child_process';
 
 export const LAST_TESTED_OPENCODE_VERSION = '1.18.34';
-export const SOURCE_COMMIT = '3f3c4780d3adc66ada5fe2e399a5acb8c7a737ba';
-export const SOURCE_SHA256 = '6e01c4b4664f8351b07cff39ef3c11d1b125ca2bcd183eb8d1d9f6fcfe2c8f83';
-const SOURCE_URL = `https://github.com/TokenNotIncluded/opencode-lmm-auth/archive/${SOURCE_COMMIT}.tar.gz`;
+const REPOSITORY = 'TokenNotIncluded/opencode-lmm-auth';
+export function resolveRelease(release, checksums) {
+  if (!release || release.draft !== false || release.prerelease !== false || !/^v[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$/.test(release.tag_name ?? '') || !/^[a-f0-9]{40}$/.test(release.target_commitish ?? '')) throw new Error('Official plugin release metadata is invalid.');
+  const base = `https://github.com/${REPOSITORY}/releases`;
+  if (release.html_url !== `${base}/tag/${release.tag_name}` || !Array.isArray(release.assets)) throw new Error('Plugin release is outside the official repository.');
+  const name = `opencode-lmm-auth-${release.target_commitish}.tgz`;
+  const asset = file => {
+    const entries = release.assets.filter(value => value.name === file);
+    const expected = `${base}/download/${release.tag_name}/${file}`;
+    if (entries.length !== 1 || entries[0].browser_download_url !== expected) throw new Error('Plugin release assets are missing or outside the official repository.');
+    return expected;
+  };
+  const url = asset(name);
+  const checksumUrl = asset('SHA256SUMS');
+  if (checksums === undefined) return {commit:release.target_commitish, url, checksumUrl};
+  const matches = checksums.split(/\r?\n/).filter(line => line.endsWith('  '+name));
+  if (matches.length !== 1 || !/^[a-f0-9]{64}  /.test(matches[0]) || matches[0].length !== 66 + name.length) throw new Error('Plugin release checksum manifest is invalid.');
+  return {commit:release.target_commitish, url, checksumUrl, sha256:matches[0].slice(0,64)};
+}
+export function resolveReleaseRedirect(location) {
+  let url;
+  try { url = new URL(location, `https://github.com/${REPOSITORY}/releases/latest/download/release.json`); }
+  catch { throw new Error('Official plugin release redirect is invalid.'); }
+  const prefix = `/${REPOSITORY}/releases/download/`;
+  if (url.origin !== 'https://github.com' || url.username || url.password || url.search || url.hash || !url.pathname.startsWith(prefix) || !url.pathname.endsWith('/release.json')) throw new Error('Plugin release redirect is outside the official repository.');
+  const tag = decodeURIComponent(url.pathname.slice(prefix.length, -'/release.json'.length));
+  if (!/^v[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$/.test(tag)) throw new Error('Official plugin release tag is invalid.');
+  return {tag,url:url.href};
+}
+export function releaseMetadata(document, tag) {
+  if (!document || document.schema_version !== 1 || document.repository !== REPOSITORY || document.tag !== tag || !/^[a-f0-9]{40}$/.test(document.source_sha ?? '') || !/^[a-f0-9]{64}$/.test(document.sha256 ?? '') || document.filename !== `opencode-lmm-auth-${document.source_sha}.tgz`) throw new Error('Official plugin release document is invalid.');
+  const base = `https://github.com/${REPOSITORY}/releases`;
+  return {draft:false,prerelease:false,tag_name:tag,target_commitish:document.source_sha,html_url:`${base}/tag/${tag}`,assets:[document.filename,'SHA256SUMS'].map(name=>({name,browser_download_url:`${base}/download/${tag}/${name}`}))};
+}
+async function latestRelease() {
+  // The public download redirect avoids GitHub's anonymous API rate limit.
+  const response = await fetch(`https://github.com/${REPOSITORY}/releases/latest/download/release.json`, {redirect:'manual',signal:AbortSignal.timeout(30000)});
+  if (![301,302,303,307,308].includes(response.status)) throw new Error(`Official plugin release lookup failed: HTTP ${response.status}`);
+  const redirect = resolveReleaseRedirect(response.headers.get('location'));
+  const metadataResponse = await fetch(redirect.url,{signal:AbortSignal.timeout(30000)});
+  if (!metadataResponse.ok) throw new Error(`Official plugin release document download failed: HTTP ${metadataResponse.status}`);
+  const text = await metadataResponse.text();
+  if (text.length > 131072) throw new Error('Plugin release document is too large.');
+  let document;
+  try { document = JSON.parse(text); } catch { throw new Error('Plugin release document is invalid JSON.'); }
+  const release = releaseMetadata(document,redirect.tag);
+  const source = resolveRelease(release);
+  const manifest = await fetch(source.checksumUrl,{signal:AbortSignal.timeout(30000)});
+  if (!manifest.ok) throw new Error(`Official plugin checksum download failed: HTTP ${manifest.status}`);
+  const checksums = await manifest.text();
+  if (checksums.length > 131072) throw new Error('Plugin checksum manifest is too large.');
+  const verified = resolveRelease(release,checksums);
+  if (verified.sha256 !== document.sha256) throw new Error('Plugin release document and checksum manifest disagree.');
+  return verified;
+}
 
 function run(command, args) {
   const result = spawnSync(command, args, {stdio: 'inherit', windowsHide: true});
@@ -74,11 +126,11 @@ export function configDirectory(env = process.env, home = os.homedir()) {
 }
 
 async function main() {
-  if (process.argv.slice(2).join(' ') === '--help') { console.log('OpenCode + LMM: installs the latest official OpenCode and the pinned OAuth plugin. Usage: node opencode.mjs'); return; }
+  if (process.argv.slice(2).join(' ') === '--help') { console.log('OpenCode + LMM: installs the latest official OpenCode and the latest official OAuth plugin. Usage: node opencode.mjs'); return; }
   if (process.argv.length > 2) throw new Error('Usage: node opencode.mjs');
   const [major, minor] = process.versions.node.split('.').map(Number);
   if (major < 22 || (major === 22 && minor < 19)) throw new Error('Node.js 22.19+ with npm is required.');
-  if (!/^[a-f0-9]{40}$/.test(SOURCE_COMMIT) || !/^[a-f0-9]{64}$/.test(SOURCE_SHA256)) throw new Error('This preview installer has no published plugin source yet.');
+  const source = await latestRelease();
   const configDir = configDirectory();
   await fs.mkdir(configDir, {recursive: true});
   const jsonPath = path.join(configDir, 'opencode.json');
@@ -93,7 +145,7 @@ async function main() {
     const hadConfig = existsSync(configPath);
     if (hadConfig) configPath = await fs.realpath(configPath);
     const original = hadConfig ? await fs.readFile(configPath, 'utf8') : '{}\n';
-    const installDir = path.join(configDir, 'lmm-auth', SOURCE_COMMIT);
+    const installDir = path.join(configDir, 'lmm-auth', source.commit);
     const entry = pathToFileURL(path.join(installDir, 'dist/index.js')).href;
     // Validate the original before installing or writing anything to the config.
     const changed = mergePlugin(original.replace(/^\uFEFF/, ''), entry, jsonc);
@@ -108,10 +160,10 @@ async function main() {
     const installedVersion = spawnSync(installedBinary, ['--version'], {encoding:'utf8', timeout:15000, windowsHide:true});
     if (installedVersion.status !== 0 || !/^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$/.test(installedVersion.stdout.trim())) throw new Error('Installed OpenCode failed version verification; configuration was not changed.');
     if (!existsSync(path.join(installDir, 'dist/index.js'))) {
-      const response = await fetch(SOURCE_URL, {signal: AbortSignal.timeout(120000)});
+      const response = await fetch(source.url, {signal: AbortSignal.timeout(120000)});
       if (!response.ok) throw new Error(`Plugin download failed: HTTP ${response.status}`);
       const archive = Buffer.from(await response.arrayBuffer());
-      if (createHash('sha256').update(archive).digest('hex') !== SOURCE_SHA256) throw new Error('Plugin source checksum mismatch; plugin configuration was not changed.');
+      if (createHash('sha256').update(archive).digest('hex') !== source.sha256) throw new Error('Plugin source checksum mismatch; plugin configuration was not changed.');
       const archivePath = path.join(work, 'plugin.tar.gz');
       const extracted = path.join(work, 'plugin');
       await fs.writeFile(archivePath, archive);
@@ -134,7 +186,7 @@ async function main() {
       try { await fs.writeFile(staged, changed, {mode: 0o600, flag: 'wx'}); await fs.rename(staged, configPath); }
       finally { await fs.rm(staged, {force: true}); }
     }
-    console.log('LMM OpenCode plugin installed. Restart OpenCode, run opencode auth login, and select LMM → Sign in with LMM (OAuth).');
+    console.log('LMM OpenCode plugin installed. Run opencode auth login --provider lmm, complete Sign in with LMM (OAuth), then restart OpenCode.');
     console.log('OpenCode version: ' + installedVersion.stdout.trim() + '. Login is explicit; no API keys or OAuth tokens were written by this installer.');
   } finally { await fs.rm(work, {recursive: true, force: true}); }
 }
