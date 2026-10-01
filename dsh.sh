@@ -4,12 +4,11 @@ set -euo pipefail
 npm install -g @deepseek-ai/dsh@latest pnpm@latest
 # Resolve the current built release rather than installing an unbuilt Git checkout
 # or a cached npm preview package. A versioned asset URL also refreshes pnpm's source.
-plugin_url=$(curl -fsSL https://api.github.com/repos/TokenNotIncluded/dsh-lmm-provider/releases/latest | node --input-type=module -e '
-let input=""; for await (const chunk of process.stdin) input+=chunk;
-const release=JSON.parse(input), asset=release.assets?.find(a=>a.name==="dsh-lmm-provider.tgz");
-if(release.draft || release.prerelease || !asset) throw Error("No published DSH LMM plugin release found");
-const url=new URL(asset.browser_download_url);
-if(url.origin!=="https://github.com" || url.username || url.password || url.search || url.hash || !/^\/TokenNotIncluded\/dsh-lmm-provider\/releases\/download\/[^/]+\/dsh-lmm-provider\.tgz$/.test(url.pathname)) throw Error("Unexpected plugin release URL");
-console.log(url.href);
-')
+release_url=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/TokenNotIncluded/dsh-lmm-provider/releases/latest)
+plugin_url=$(node --input-type=module -e '
+const url=new URL(process.argv[1]);
+const prefix="/TokenNotIncluded/dsh-lmm-provider/releases/tag/", tag=url.pathname.slice(prefix.length);
+if(url.origin!=="https://github.com" || url.username || url.password || url.search || url.hash || !url.pathname.startsWith(prefix) || !/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(tag)) throw Error("Unexpected plugin release URL");
+console.log("https://github.com/TokenNotIncluded/dsh-lmm-provider/releases/download/"+tag+"/dsh-lmm-provider.tgz");
+' "$release_url")
 dsh plugin --profile "${1:-web}" add "$plugin_url" --ignore-scripts

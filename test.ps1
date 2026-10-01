@@ -57,11 +57,11 @@ Check 'dsh.ps1' $npmFailure 9 'npm failed'
 $npmSuccess = @'
 function npm.cmd { Write-Output ($args -join '|'); $global:LASTEXITCODE=0 }
 function dsh.cmd { Write-Output ($args -join '|'); $global:LASTEXITCODE=0 }
-function Invoke-RestMethod { param($Uri) if ($Uri -notmatch '/TokenNotIncluded/dsh-lmm-provider/releases/latest$') { throw 'wrong release URL' }; return [pscustomobject]@{assets=@([pscustomobject]@{name='dsh-lmm-provider.tgz';browser_download_url='https://github.com/TokenNotIncluded/dsh-lmm-provider/releases/download/v0.1.0-alpha.5/dsh-lmm-provider.tgz'})} }
+function Invoke-WebRequest { param($Uri,$Method,[switch]$UseBasicParsing) if ($Uri -ne 'https://github.com/TokenNotIncluded/dsh-lmm-provider/releases/latest' -or $Method -ne 'Head') { throw 'wrong release URL' }; return [pscustomobject]@{BaseResponse=[pscustomobject]@{ResponseUri=[Uri]'https://github.com/TokenNotIncluded/dsh-lmm-provider/releases/tag/v0.1.0-alpha.5'}} }
 '@
 Check 'dsh.ps1' $npmSuccess 0 'plugin\|--profile\|headless.*releases/download/v0.1.0-alpha.5/dsh-lmm-provider.tgz' '-Profile headless'
-Check 'dsh.ps1' ($npmSuccess+"`nfunction Invoke-RestMethod { [pscustomobject]@{assets=@()} }") 1 'No published DSH LMM plugin release found'
-Check 'dsh.ps1' ($npmSuccess+"`nfunction Invoke-RestMethod { [pscustomobject]@{assets=@([pscustomobject]@{name='dsh-lmm-provider.tgz';browser_download_url='https://evil.invalid/plugin.tgz'})} }") 1 'Unexpected plugin release URL'
+Check 'dsh.ps1' ($npmSuccess+"`nfunction Invoke-WebRequest { throw 'missing-release' }") 1 'missing-release'
+Check 'dsh.ps1' ($npmSuccess+"`nfunction Invoke-WebRequest { [pscustomobject]@{BaseResponse=[pscustomobject]@{ResponseUri=[Uri]'https://evil.invalid/plugin.tgz'}} }") 1 'Unexpected plugin release URL'
 $upstream = @'
 function Invoke-RestMethod { return 'param([string]$Version) Write-Output "upstream:$Version"' }
 '@

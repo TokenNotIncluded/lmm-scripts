@@ -39,9 +39,9 @@ if name == 'curl':
         print('printf "%s\\n" "$@" > "$HOME/received-args"')
     elif url.endswith('/desktop.sh'):
         print(Path(os.environ['PROJECT'], 'desktop.sh').read_text())
-    elif url == 'https://api.github.com/repos/TokenNotIncluded/dsh-lmm-provider/releases/latest':
-        asset_url=os.environ.get('DSH_ASSET_URL','https://github.com/TokenNotIncluded/dsh-lmm-provider/releases/download/v0.1.0-alpha.5/dsh-lmm-provider.tgz')
-        print(json.dumps({'assets': [] if os.environ.get('NO_ASSET') else [{'name':'dsh-lmm-provider.tgz','browser_download_url':asset_url}]}))
+    elif url == 'https://github.com/TokenNotIncluded/dsh-lmm-provider/releases/latest':
+        if os.environ.get('NO_ASSET'): sys.exit(22)
+        print(os.environ.get('DSH_ASSET_URL','https://github.com/TokenNotIncluded/dsh-lmm-provider/releases/tag/v0.1.0-alpha.5'))
     elif '/releases/latest' in url:
         print(json.dumps({'assets': [] if os.environ.get('NO_ASSET') else [
             {'name': 'Tool-amd64.deb', 'browser_download_url': 'https://github.com/official/tool.deb'},
