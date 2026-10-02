@@ -27,7 +27,9 @@ jobs:
           python-version: '3.x'
       - name: Shell contracts
         if: runner.os != 'Windows'
-        run: python3 test.py
+        run: |
+          python3 test.py
+          python3 test-ai-tools.py
       - name: ShellCheck
         if: runner.os == 'Linux'
         run: shellcheck *.sh

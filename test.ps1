@@ -88,4 +88,104 @@ function Start-Process {
 '@
 Check 'cc-switch.ps1' ($msi+"`n`$env:PROCESSOR_ARCHITECTURE='AMD64'") 0 'https://test.invalid/x64'
 Check 'cc-switch.ps1' ($msi+"`n`$env:PROCESSOR_ARCHITECTURE='ARM64'") 0 'https://test.invalid/arm64'
+# New AI tools: download contracts, setup separation, and native exit propagation.
+$nativeUrls = @{
+  'grok-build'='https://x.ai/cli/install.ps1'
+  'kimi'='https://code.kimi.com/kimi-code/install.ps1'
+  'hermes'='https://hermes-agent.nousresearch.com/install.ps1'
+  'openclaw'='https://openclaw.ai/install.ps1'
+  'aider'='https://aider.chat/install.ps1'
+  'uv'='https://astral.sh/uv/install.ps1'
+}
+foreach ($name in $nativeUrls.Keys) {
+  $url = $nativeUrls[$name]
+  $fixture = "function Invoke-RestMethod { param(`$Uri) if (`$Uri -ne '$url') { throw 'wrong installer URL' }; return 'param([switch]`$SkipSetup,[switch]`$NoOnboard) Write-Output upstream; Write-Output (`$SkipSetup.IsPresent -or `$NoOnboard.IsPresent)' }"
+  $pattern = if ($name -in @('hermes','openclaw')) { 'True' } else { 'upstream' }
+  Check "$name.ps1" $fixture 0 $pattern
+  Check "$name.ps1" "function Invoke-RestMethod { throw 'download-failed' }" 1 'download-failed'
+  Check "$name.ps1" "function Invoke-RestMethod { return 'exit 9' }" 9 ''
+}
+$cursorWsl = @'
+function wsl.exe { Write-Output ($args -join '|'); $global:LASTEXITCODE=0 }
+'@
+Check 'cursor-cli.ps1' $cursorWsl 0 'bash\|-c\|.*https://cursor.com/install'
+Check 'cursor-cli.ps1' $cursorWsl 0 'cursor-agent\|login' 'setup'
+$packages = @{'gemini'='@google/gemini-cli'; 'qwen-code'='@qwen-code/qwen-code'; 'codebuddy'='@tencent-ai/codebuddy-code'}
+foreach ($name in $packages.Keys) {
+  $fixture = "function node { `$global:LASTEXITCODE=0 }; function npm.cmd { Write-Output (`$args -join '|'); `$global:LASTEXITCODE=0 }"
+  Check "$name.ps1" $fixture 0 ([regex]::Escape('install|-g|'+$packages[$name]+'@latest'))
+  Check "$name.ps1" ($fixture+"; function npm.cmd { Write-Output npm-failed; `$global:LASTEXITCODE=8 }") 8 'npm-failed'
+  Check "$name.ps1" ($fixture+"; function node { `$global:LASTEXITCODE=7 }; function npm.cmd { throw 'must not install' }") 7 ''
+}
+$setups = @{'grok-build'='grok'; 'kimi'='kimi'; 'hermes'='hermes'; 'openclaw'='openclaw'; 'aider'='aider'; 'gemini'='gemini.cmd'; 'qwen-code'='qwen.cmd'; 'codebuddy'='codebuddy.cmd'}
+foreach ($name in $setups.Keys) {
+  $command = $setups[$name]
+  $fixture = "function Invoke-RestMethod { throw 'setup must not download' }; function $command { Write-Output configured; `$global:LASTEXITCODE=6 }"
+  Check "$name.ps1" $fixture 6 'configured' 'setup'
+}
+Check 'astrbot.ps1' "function uv { Write-Output (`$args -join '|'); `$global:LASTEXITCODE=0 }" 0 'tool\|install\|--upgrade\|astrbot\|--python\|3.12'
+Check 'astrbot.ps1' '' 1 'Specify an AstrBot instance directory' 'setup'
+$astrbotSetup = @'
+function New-Item { }
+function Push-Location { param($LiteralPath) if ($LiteralPath -ne 'instance with spaces') { throw 'directory boundaries lost' } }
+function Pop-Location { }
+function Test-Path { $false }
+function astrbot { Write-Output ($args -join '|'); $global:LASTEXITCODE=0 }
+function uv { throw 'setup must not install' }
+'@
+Check 'astrbot.ps1' $astrbotSetup 0 'init' "setup -Directory 'instance with spaces'"
+Check 'astrbot.ps1' ($astrbotSetup+"`nfunction Test-Path { `$true }; function astrbot { throw 'must not reinitialize existing data' }") 0 'already has AstrBot data' "setup -Directory 'instance with spaces'"
+$desktopFixture = @'
+function Invoke-RestMethod {
+  param($Uri)
+  if ($Uri -like 'https://cursor.com/api/download*') { return [pscustomobject]@{downloadUrl='https://downloads.cursor.com/setup.exe'} }
+  return [pscustomobject]@{assets=@(
+    [pscustomobject]@{name='Cherry-Studio-1-win-x64-setup.exe';browser_download_url='https://github.com/CherryHQ/cherry-studio/releases/download/v1/x64.exe'},
+    [pscustomobject]@{name='Cherry-Studio-1-win-arm64-setup.exe';browser_download_url='https://github.com/CherryHQ/cherry-studio/releases/download/v1/arm64.exe'},
+    [pscustomobject]@{name='Cherry-Studio-CN-1-win-x64-setup.exe';browser_download_url='https://github.com/CherryHQ/cherry-studio/releases/download/v1/cn.exe'}
+  )}
+}
+function Invoke-WebRequest { param($Uri,$OutFile,[switch]$UseBasicParsing) Write-Output $Uri; Set-Content -LiteralPath $OutFile -Value fixture }
+function Start-Process { param($FilePath,[switch]$Wait,[switch]$PassThru) [pscustomobject]@{ExitCode=0} }
+$env:PROCESSOR_ARCHITEW6432=''
+'@
+foreach ($cpu in @('AMD64','ARM64')) {
+  $arch = if ($cpu -eq 'AMD64') { 'x64' } else { 'arm64' }
+  Check 'cherry-studio.ps1' ($desktopFixture+"`n`$env:PROCESSOR_ARCHITECTURE='$cpu'") 0 "$arch.exe"
+  Check 'cursor.ps1' ($desktopFixture+"`n`$env:PROCESSOR_ARCHITECTURE='$cpu'") 0 'downloads.cursor.com'
+}
+Check 'ollama.ps1' $desktopFixture 0 'https://ollama.com/download/OllamaSetup.exe'
+foreach ($name in @('cursor','cherry-studio','ollama')) {
+  Check "$name.ps1" ($desktopFixture+"`n`$env:PROCESSOR_ARCHITECTURE='AMD64'; function Start-Process { [pscustomobject]@{ExitCode=9} }") 9 ''
+  Check "$name.ps1" ($desktopFixture+"`n`$env:PROCESSOR_ARCHITECTURE='AMD64'; function Invoke-WebRequest { throw 'download-failed' }") 1 'download-failed'
+}
+Check 'cursor.ps1' ($desktopFixture+"`n`$env:PROCESSOR_ARCHITECTURE='AMD64'; function Invoke-RestMethod { [pscustomobject]@{downloadUrl='https://evil.invalid/setup.exe'} }") 1 'Unexpected Cursor'
+Check 'cherry-studio.ps1' ($desktopFixture+"`n`$env:PROCESSOR_ARCHITECTURE='AMD64'; function Invoke-RestMethod { [pscustomobject]@{assets=@()} }") 1 'No unique official'
+# Exercise the actual PowerShell menu with local inert child scripts.
+$menuWork = Join-Path ([IO.Path]::GetTempPath()) ('lmm-menu-contract-' + [guid]::NewGuid())
+try {
+  New-Item -ItemType Directory -Path $menuWork | Out-Null
+  Copy-Item (Join-Path $PSScriptRoot 'menu.ps1') (Join-Path $menuWork 'menu.ps1')
+  foreach ($name in @('cursor-cli','grok-build','hermes','astrbot')) {
+    Set-Content -LiteralPath (Join-Path $menuWork "$name.ps1") -Value 'Write-Output ("ROUTED:" + ($args -join "|"))'
+  }
+  foreach ($entry in @(@('10','1','install'),@('11','2','setup'),@('16','0',''))) {
+    $global:LmmMenuAnswers = [Collections.Generic.Queue[string]]::new()
+    $global:LmmMenuAnswers.Enqueue($entry[0]); $global:LmmMenuAnswers.Enqueue($entry[1]); $global:LmmMenuAnswers.Enqueue('0')
+    function Read-Host { param($Prompt) return $global:LmmMenuAnswers.Dequeue() }
+    $output = & (Join-Path $menuWork 'menu.ps1') | Out-String
+    if ($entry[2] -and $output -notmatch ([regex]::Escape('ROUTED:'+$entry[2]))) { throw 'PowerShell menu action routing failed' }
+    if (-not $entry[2] -and $output -match 'ROUTED:') { throw 'Menu back unexpectedly ran an installer' }
+    $checks++
+  }
+  $global:LmmMenuAnswers = [Collections.Generic.Queue[string]]::new()
+  foreach ($answer in @('18','2','instance with spaces','0')) { $global:LmmMenuAnswers.Enqueue($answer) }
+  $output = & (Join-Path $menuWork 'menu.ps1') | Out-String
+  if ($output -notmatch 'ROUTED:setup\|-Directory\|instance with spaces') { throw 'AstrBot menu directory routing failed' }
+  $checks++
+} finally {
+  Remove-Variable LmmMenuAnswers -Scope Global -ErrorAction SilentlyContinue
+  Remove-Item Function:Read-Host -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath $menuWork -Recurse -Force -ErrorAction SilentlyContinue
+}
 Write-Output "PowerShell syntax and $checks command-contract checks passed."

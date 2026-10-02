@@ -254,7 +254,11 @@ class InstallTests(unittest.TestCase):
             self.assertFalse((ROOT/path).exists())
         scripts=[f for pattern in ('*.sh','*.ps1','*.mjs') for f in ROOT.glob(pattern) if not f.name.startswith('test')]
         # Include both shared Codewhale and OpenCode implementations in the size budget.
-        self.assertLess(sum(len(f.read_bytes()) for f in scripts),48000)
+        originals = {'codex', 'claude-code', 'pi', 'dsh', 'lmm', 'cc-switch', 'clash-verge-rev', 'desktop', 'menu', 'codewhale', 'opencode'}
+        self.assertLess(sum(len(f.read_bytes()) for f in scripts if f.stem in originals), 50000)
+        for entry in scripts:
+            if entry.stem not in originals:
+                self.assertLess(len(entry.read_bytes()), 4096)
         for file in scripts:
             text=file.read_text()
             self.assertNotRegex(text,r'npmmirror|rank_urls|LMM_NETWORK|LMM_RETRIES|LMM_COMMAND_TIMEOUT|configure_npm')

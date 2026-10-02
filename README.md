@@ -25,6 +25,56 @@ irm https://raw.githubusercontent.com/TokenNotIncluded/lmm-scripts/main/menu.ps1
 | `opencode` | 官方 npm 最新 OpenCode + 独立 LMM OAuth 插件 | `opencode auth login --provider lmm`，然后 `opencode` |
 | `codewhale` | 官方 npm 安装 + 固定版本 LMM OAuth 适配器 | `bash codewhale.sh run` / `.\codewhale.ps1 run` |
 
+## 更多 AI 工具
+
+新增入口在菜单第 10–23 项，原来的 1–9 项不变。CLI 子菜单可选安装/更新，或配置/登录；配置操作要求工具已经安装并能从 PATH 找到。单个脚本默认执行 `install`，`help` 查看用法。新增脚本完全独立，下载一个文件即可运行，不需要下载共用实现。
+
+| 文件名（`.sh` / `.ps1`） | 安装方式与平台 | 配置 / 启动 |
+|---|---|---|
+| `cursor-cli` | Cursor 官方安装器；Linux、macOS，Windows 通过已有 WSL | `setup` 执行 `cursor-agent login`，之后 `cursor-agent`；Windows 在 WSL 内运行 |
+| `grok-build` | xAI 官方原生安装器；Linux、macOS、Windows | `setup` 执行 `grok login`，之后 `grok` |
+| `gemini` | npm `@google/gemini-cli@latest`；Node 20+ | `setup` 启动 `gemini` 的首次登录界面 |
+| `qwen-code` | 阿里 Qwen Code，npm `@qwen-code/qwen-code@latest`；Node 22+ | `setup` 启动 `qwen`，按界面选择认证方式 |
+| `kimi` | 月之暗面当前维护的 **Kimi Code CLI** 官方原生安装器 | `setup` 启动 `kimi`，输入 `/login`；Windows 首次运行另需 Git for Windows |
+| `codebuddy` | 腾讯 CodeBuddy Code，npm `@tencent-ai/codebuddy-code@latest`；本入口要求 Node 20+ | `setup` 启动 `codebuddy`，可选中国站、国际站或企业登录 |
+| `hermes` | Nous Research 官方安装器；安装时跳过 setup | `setup` 执行 `hermes setup`，之后 `hermes` |
+| `openclaw` | 官方安装器负责运行时依赖；安装时跳过 onboarding | `setup` 执行 `openclaw onboard`；不额外传入安装后台服务的参数 |
+| `astrbot` | `uv tool install --upgrade astrbot --python 3.12`，同时用于安装和更新 | `setup DIRECTORY` 初始化指定实例目录，再在该目录运行 `astrbot run`，通过 WebUI 配置模型与聊天平台 |
+| `aider` | Aider 官方安装器，隔离 Python 环境 | `setup` 启动 `aider`；按官方说明配置供应商环境变量、模型或项目配置 |
+| `cursor` | Cursor 桌面版：macOS Homebrew；Linux 官方 deb/rpm 或 AppImage；Windows 官方用户安装器 | 在桌面应用内登录与配置，和 Cursor CLI 分开安装 |
+| `cherry-studio` | Cherry Studio：macOS Homebrew；Linux/Windows 动态解析官方最新正式 Release | 桌面应用内设置模型服务、API 地址和账号；使用标准版，不混选 CN/便携版资产 |
+| `ollama` | Linux 官方安装器、macOS Homebrew formula、Windows 官方安装器 | 需要时运行 `ollama serve`；`ollama run MODEL` 选择模型；本脚本不下载模型 |
+| `uv` | Astral 官方安装器，供 AstrBot 等 Python 工具使用 | 重开终端后运行 `uv --version` |
+
+例如，在本仓库目录运行：
+
+```sh
+bash menu.sh
+bash qwen-code.sh install
+bash qwen-code.sh setup
+bash hermes.sh setup
+bash astrbot.sh setup "$HOME/astrbot-instance"
+cd "$HOME/astrbot-instance"
+astrbot run
+```
+
+Windows：
+
+```powershell
+.\menu.ps1
+.\qwen-code.ps1 install
+.\qwen-code.ps1 setup
+.\astrbot.ps1 setup -Directory "$HOME\astrbot-instance"
+Set-Location "$HOME\astrbot-instance"
+astrbot run
+```
+
+安装和配置分开执行：安装完成后先按上游提示重开终端，再执行 `setup`。不收集或代写 API Key，不批量覆盖工具的配置；登录、供应商选择和密钥保存交给各工具自己的界面。上游安装器可能安装依赖、修改 PATH、要求认证或启动服务（例如 Ollama 的 Linux 安装器），这些行为仍由上游决定。AstrBot 使用 uv 隔离环境，不向系统 Python 执行 pip 安装；uv 缺失时先运行 `uv.sh` / `uv.ps1`，更新仍用同一个 AstrBot 安装入口。实例目录已经包含 `data` 时，setup 跳过初始化，保留现有数据与配置。
+
+桌面 Linux 安装需要 curl、jq 和相应包管理器；没有 deb/rpm 包管理器时安装 AppImage 到 `~/.local/bin`，运行依赖（例如 FUSE）仍需满足上游要求，不关闭 Electron 沙箱。macOS 需要已有 Homebrew。新增原生二进制/桌面入口拒绝直接在 Termux 安装；npm 和 uv 路线不承诺 Android 兼容，因此新增入口暂不进入 Termux 菜单。
+
+2026-10-02 核对了官方入口：[Cursor CLI](https://docs.cursor.com/en/cli/installation)、[Cursor 桌面版](https://cursor.com/en-US/download)、[Grok Build](https://docs.x.ai/build/overview)、[Gemini CLI](https://github.com/google-gemini/gemini-cli/blob/main/docs/get-started/installation.mdx)、[Qwen Code](https://github.com/QwenLM/qwen-code/blob/main/scripts/installation/INSTALLATION_GUIDE.md)、[Kimi Code CLI](https://github.com/MoonshotAI/kimi-code)、[腾讯 CodeBuddy](https://www.codebuddy.ai/docs/cli/quickstart)、[Hermes](https://hermes-agent.nousresearch.com/docs/)、[OpenClaw](https://docs.openclaw.ai/install)、[AstrBot 安装](https://docs.astrbot.app/en/deploy/astrbot/package.html) / [CLI](https://docs.astrbot.app/en/use/cli.html)、[Aider](https://aider.chat/docs/install.html)、[Cherry Studio](https://github.com/CherryHQ/cherry-studio/releases)、[Ollama](https://ollama.com/download)、[uv](https://docs.astral.sh/uv/getting-started/installation/)。不安装已经宣布停服的 [iFlow CLI](https://github.com/iflow-ai/iflow-cli)，也不使用已经归档的旧 Python Kimi CLI。
+
 Pi 主程序通过官方最新安装器安装；脚本用 npm 的 `@alpha` 入口执行 LMM 插件来源切换，实际安装 GitHub 最新 `main`。入口先确认安装成功，再清理同插件的其他来源；保留无关扩展，失败时保留旧来源。不设 Pi 宿主版本上限。安装 LMM 插件另需 Node.js 22.19+ 和 npm。Pi 的安装位置、权限和 Windows Git Bash 仍由官方安装器处理。
 
 DSH 安装官方 npm `latest` 宿主和 pnpm，LMM 插件安装当前 GitHub Release 的已构建包；其当前官方 README 使用 npx，没有现行的独立安装脚本，不能拿归档记录中的旧脚本替代。
@@ -65,7 +115,7 @@ Codex/Claude 使用**已有的 PRoot Linux 环境**，不是 Android 原生二�
 
 旧的 `--network`、`--root`、`--check`、`--update` 等自定义参数已移除；不要继续传入。Codex/Claude 只接受各自官方参数，DSH 可传 profile。旧版 `lmm-tools` 目录不会被删除；从 PATH 中移除旧的 `lmm-tools/bin`，避免旧启动器优先于新安装。配置和账号数据不迁移、不清空。
 
-所有安装代码平铺在根目录；两个 Unix 桌面入口共用 `desktop.sh`，Codewhale 与 OpenCode 两个平台入口分别共用 `codewhale.mjs` 和 `opencode.mjs`。本地运行用同目录文件，单独下载运行时用固定 Git 提交获取共用脚本；Codewhale 和 OpenCode 额外校验 SHA-256。菜单同样固定到完整的安装器提交。不维护生成器或独立哈希清单。
+所有安装代码平铺在根目录；两个 Unix 桌面入口共用 `desktop.sh`，Codewhale 与 OpenCode 两个平台入口分别共用 `codewhale.mjs` 和 `opencode.mjs`。本地运行用同目录文件，单独下载运行时用固定 Git 提交获取共用脚本；Codewhale 和 OpenCode 额外校验 SHA-256。菜单原有入口继续使用固定提交，新增入口在单文件菜单的远程回退中使用 `main`；可通过 `LMM_SCRIPTS_REV=完整提交`（PowerShell 用 `$env:LMM_SCRIPTS_REV`）指定所有远程菜单入口的版本。发布前新入口只能从本地仓库运行，远程回退需等这些文件推送后才可用。不维护生成器或独立哈希清单。
 
 ## 依据与测试
 
@@ -74,3 +124,5 @@ Codex/Claude 使用**已有的 PRoot Linux 环境**，不是 Android 原生二�
 本地检查：`python3 test.py`、`pwsh -NoProfile -File test.ps1`、`shellcheck *.sh`。Codewhale 另有 `node --test test-codewhale.mjs`、`python3 test-codewhale-menu.py`、`pwsh -NoProfile -File test-codewhale.ps1`。CI 另做三平台 CLI 实装和 Debian/Alpine 实装；不把模拟测试当作桌面 GUI、Termux 真机、账号登录或代理功能实测。
 
 OpenCode 检查：`node --test test-opencode.mjs test-opencode-entry.mjs`、`pwsh -NoProfile -File test-opencode.ps1`、`node test-opencode-install.mjs`。最后一项隔离安装两次并启动真实宿主确认 LMM OAuth 注册，不登录或调用模型。三平台 CI 分别验证官方最新宿主与最近验证的基线宿主，安装器始终安装宿主及插件的官方最新版。
+
+新增入口检查：`python3 test-ai-tools.py`、`python3 test-codewhale-menu.py`、`pwsh -NoProfile -File test.ps1`、`shellcheck *.sh`。测试覆盖安装器地址、下载失败停止执行、官方跳过配置参数、npm/uv 错误返回、配置不触发安装、桌面资产筛选与架构、Windows WSL 路由、AstrBot 路径含空格、菜单保留原编号。CI 的 Unix 检查已加入新增脚本测试；PowerShell 7 与 Windows PowerShell 5.1 均复用扩展后的检查。新增工具尚未逐个做真实安装、账号登录、模型调用或桌面界面验收；这些离线检查不能证明上游安装器和网络在所有平台都可用。

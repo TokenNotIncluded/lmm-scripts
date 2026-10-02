@@ -96,7 +96,7 @@ class MenuTests(unittest.TestCase):
         self.assertNotIn('SELECTED:pi menu', output)
 
     def test_out_of_range_and_overflow_input_return_to_menu(self):
-        output = self.run_menu(['10', '999999999999999999999999999', '-1', '0'])
+        output = self.run_menu(['24', '999999999999999999999999999', '-1', '0'])
         self.assertNotIn('SELECTED:', output)
 
     def test_termux_hides_desktop_apps_and_routes_sixth_option(self):
@@ -107,6 +107,23 @@ class MenuTests(unittest.TestCase):
         self.assertNotIn('clash-verge-rev', output)
         self.assertIn('6  codewhale', output)
         self.assertIn('SELECTED:codewhale menu', output)
+
+    def test_new_cli_install_and_setup_submenus(self):
+        for number, name in [(10, 'cursor-cli'), (11, 'grok-build'), (13, 'qwen-code'), (17, 'openclaw')]:
+            self.stub(name)
+            output = self.run_menu([str(number), '1', str(number), '2', '0'])
+            self.assertIn('SELECTED:' + name + ' install', output)
+            self.assertIn('SELECTED:' + name + ' setup', output)
+
+    def test_astrbot_directory_with_spaces_is_one_argument(self):
+        (self.home / 'astrbot.sh').write_text('printf "ASTRBOT:%s:%s:%s\\n" "$#" "$1" "$2"\n')
+        output = self.run_menu(['18', '2', 'instance with spaces', '0'])
+        self.assertIn('ASTRBOT:2:setup:instance with spaces', output)
+
+    def test_submenu_back_does_not_install(self):
+        self.stub('hermes')
+        output = self.run_menu(['16', '0', '0'])
+        self.assertNotIn('SELECTED:', output)
 
     def test_remote_menu_preserves_submenu_argument(self):
         bin_dir = self.home / 'bin'
