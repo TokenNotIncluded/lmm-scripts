@@ -1,6 +1,6 @@
 # Codewhale 一键安装和 LMM 配置
 
-需要 Node.js 22+ 和 npm。Bash 入口单独下载时还需要 curl。脚本不代装 Node，不改 npm registry，不使用 sudo 或 `--force`。安装使用官方的 `npm install --global codewhale@latest`；二进制选择和校验仍由官方 npm 安装器负责。LMM 适配器安装固定 Git 提交 `adad64b7ac77ec997b5be4662c6b6ccf36998357`，禁用其 npm 生命周期脚本；不依赖尚未发布的 npm 包。
+需要 Node.js 22+ 和 npm。Bash 入口单独下载时还需要 curl。脚本不代装 Node，不改 npm registry，不使用 sudo 或 `--force`。安装使用官方的 `npm install --global codewhale@latest`；二进制选择和校验仍由官方 npm 安装器负责。LMM 适配器安装固定 Git 提交 `62eb05b40f1dda7b844b5430ad2b735e66508aa0`，禁用其 npm 生命周期脚本；不依赖尚未发布的 npm 包。
 
 ## 安装并配置
 
