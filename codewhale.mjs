@@ -7,7 +7,7 @@ import { createRequire } from 'node:module';
 import { createInterface } from 'node:readline/promises';
 import { pathToFileURL } from 'node:url';
 
-export const PROVIDER_REV = '8c78be0f936fb8f508badabc0195cdb21442a75d';
+export const PROVIDER_REV = 'adad64b7ac77ec997b5be4662c6b6ccf36998357';
 export const PROVIDER_URL = `https://github.com/TokenNotIncluded/codewhale-lmm-provider/archive/${PROVIDER_REV}.tar.gz`;
 const require = createRequire(import.meta.url);
 const actions = ['setup', 'install', 'login', 'run', 'models', 'status', 'balance', 'usage', 'logout', 'doctor', 'menu', 'help'];
@@ -49,8 +49,8 @@ export function parseArguments(argv) {
   if (!actions.includes(result.action)) throw new Error('Unknown action. Use --help.');
   if (result.noBrowser && !['login', 'setup'].includes(result.action)) throw new Error('--no-browser is only valid with login/setup.');
   if ((result.model || result.forwarded.length) && result.action !== 'run') throw new Error('--model and forwarded arguments are only valid with run.');
-  if (result.forwarded.some(arg => /^--(?:provider|model|base-url|api-key|config|config-path)(?:=|$)/.test(arg))) {
-    throw new Error('Do not override the LMM provider, model, configuration or credentials after --.');
+  if (result.forwarded.some(arg => /^--(?:provider|model|base-url|api-key|config|config-path|profile)(?:=|$)/.test(arg))) {
+    throw new Error('Do not override the LMM provider, model, configuration, profile or credentials after --.');
   }
   return result;
 }
