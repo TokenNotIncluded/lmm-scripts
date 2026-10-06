@@ -1,6 +1,6 @@
 # Codewhale 一键安装和 LMM 配置
 
-需要 Node.js 22+ 和 npm。Bash 入口单独下载时还需要 curl。脚本不代装 Node，不改 npm registry，不使用 sudo 或 `--force`。安装使用官方的 `npm install --global codewhale@latest`；二进制选择和校验仍由官方 npm 安装器负责。LMM 适配器安装固定 Git 提交 `8c78be0f936fb8f508badabc0195cdb21442a75d`，禁用其 npm 生命周期脚本；不依赖尚未发布的 npm 包。
+需要 Node.js 22+ 和 npm。Bash 入口单独下载时还需要 curl。脚本不代装 Node，不改 npm registry，不使用 sudo 或 `--force`。安装使用官方的 `npm install --global codewhale@latest`；二进制选择和校验仍由官方 npm 安装器负责。LMM 适配器安装固定 Git 提交 `adad64b7ac77ec997b5be4662c6b6ccf36998357`，禁用其 npm 生命周期脚本；不依赖尚未发布的 npm 包。
 
 ## 安装并配置
 
@@ -68,3 +68,5 @@ Node 测试使用模拟 npm、适配器和原生程序；菜单测试实际分�
 新增 CI 在 Ubuntu、macOS、Windows 运行离线测试，并使用隔离的 npm prefix 做真实下载安装和无账号启动检查；另覆盖 Windows PowerShell 5.1。CI 结果以对应提交为准。以上都不代替生产账号 OAuth、真实推理和 Termux 真机验收。
 
 接口依据：[官方安装文档](https://github.com/Hmbown/Codewhale/blob/1554ac11846bc3e1423b0ee66591eea2870f10b1/docs/INSTALL.md)、[官方 npm 原生程序解析](https://github.com/Hmbown/Codewhale/blob/1554ac11846bc3e1423b0ee66591eea2870f10b1/npm/codewhale/scripts/run.js)、[LMM 适配器](https://github.com/TokenNotIncluded/codewhale-lmm-provider)。
+
+新版 Codewhale 的 `--profile` 不能透传覆盖 LMM 临时配置；原生 `-p`（提示词）和 `-c`（继续会话）保持可用。Bash 与 PowerShell 的独立下载入口固定到同一份助手提交，并校验相同 SHA-256。

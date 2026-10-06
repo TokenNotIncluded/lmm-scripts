@@ -65,7 +65,7 @@ test('unknown commands/options, missing values and cross-action flags fail close
   }
 });
 test('provider, credential and config overrides cannot be forwarded', () => {
-  for (const flag of ['--api-key=secret', '--provider', '--config-path', '--model=other', '--base-url=x']) {
+  for (const flag of ['--api-key=secret', '--provider', '--config-path', '--model=other', '--base-url=x', '--profile', '--profile=personal']) {
     assert.throws(() => parseArguments(['run', '--', flag]));
   }
 });
@@ -240,7 +240,7 @@ process.exit(Number(process.env.TEST_CURL_EXIT||0));\n`;
     const result = f.runShell('--help');
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /Codewhale \+ LMM/);
-    assert.ok(f.calls()[0][1].some(arg => /354a0e7e8597957b33f5d4f4afcf9ac7ebfe8693\/codewhale.mjs/.test(arg)));
+    assert.ok(f.calls()[0][1].some(arg => /319d9790ba026583ea226fb92b13b366b738c3ef\/codewhale.mjs/.test(arg)));
   });
   test('truncated downloads fail before execution even when bytes were written', t => {
     const f = shellFixture(t); f.env.TEST_BAD_DOWNLOAD = '1'; f.env.TEST_CURL_EXIT = '18';
@@ -264,3 +264,7 @@ process.exit(Number(process.env.TEST_CURL_EXIT||0));\n`;
     assert.deepEqual(f.calls(), [['local', ['run', '--model', id, '--', 'exec', task]]]);
   });
 }
+
+test('native prompt and continue short flags are not mistaken for route overrides', () => {
+  assert.deepEqual(parseArguments(['run', '--', '-p', 'hello', '-c']).forwarded, ['-p', 'hello', '-c']);
+});
