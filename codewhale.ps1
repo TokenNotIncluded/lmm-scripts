@@ -19,8 +19,8 @@ try {
     $work = Join-Path ([IO.Path]::GetTempPath()) ('lmm-codewhale-' + [guid]::NewGuid())
     New-Item -ItemType Directory -Path $work | Out-Null
     $helper = Join-Path $work 'codewhale.mjs'
-    Invoke-WebRequest -UseBasicParsing 'https://raw.githubusercontent.com/TokenNotIncluded/lmm-scripts/354a0e7e8597957b33f5d4f4afcf9ac7ebfe8693/codewhale.mjs' -OutFile $helper
-    if ((Get-FileHash -LiteralPath $helper -Algorithm SHA256).Hash -ne 'd985a055e9f5a95ad8b358d3569f4a9d33a1eaca52dffa39c4b8aa2268a3bbf1') {
+    Invoke-WebRequest -UseBasicParsing 'https://raw.githubusercontent.com/TokenNotIncluded/lmm-scripts/319d9790ba026583ea226fb92b13b366b738c3ef/codewhale.mjs' -OutFile $helper
+    if ((Get-FileHash -LiteralPath $helper -Algorithm SHA256).Hash -ne '91dcff456f04abb0ef0ff7f95742ff3d332bfb2c93b4b067f4d778008556f69c') {
       throw 'Codewhale setup script checksum mismatch; nothing was executed.'
     }
   }
