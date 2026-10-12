@@ -25,6 +25,17 @@ irm https://raw.githubusercontent.com/TokenNotIncluded/lmm-scripts/main/menu.ps1
 | `opencode` | 官方 npm 最新 OpenCode + 独立 LMM OAuth 插件 | `opencode auth login --provider lmm`，然后 `opencode` |
 | `codewhale` | 官方 npm 安装 + 固定版本 LMM OAuth 适配器 | `bash codewhale.sh run` / `.\codewhale.ps1 run` |
 
+## Magpie
+
+菜单第 **24** 项（Termux 第 **7** 项）安装或更新 [Magpie](https://github.com/yetone/magpie)，原有编号不变。
+
+- Linux / macOS / Termux：`bash magpie.sh`，复用官方安装器；Linux 自动选择桌面或终端版。
+- Windows x64 / ARM64：`.\magpie.ps1`，安装官方最新正式发行包并校验 SHA-256；`-Cli` 选择终端版。
+- 重复运行同一脚本即可更新。不自动启动、登录、写入 API Key 或更改供应商配置。
+
+单独下载的菜单统一使用同一个固定脚本提交，不再混用旧版本和 `main`；`LMM_SCRIPTS_REV` 仍可显式覆盖。
+安装目录、上游选项、平台条件和测试说明见 [MAGPIE.md](MAGPIE.md)。
+
 ## 更多 AI 工具
 
 新增入口在菜单第 10–23 项，原来的 1–9 项不变。CLI 子菜单可选安装/更新，或配置/登录；配置操作要求工具已经安装并能从 PATH 找到。单个脚本默认执行 `install`，`help` 查看用法。新增脚本完全独立，下载一个文件即可运行，不需要下载共用实现。

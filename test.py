@@ -247,7 +247,7 @@ class InstallTests(unittest.TestCase):
         code=(ROOT/'menu.sh').read_text().split('while true; do')[0]+'printf "%s\\n" "${tools[@]}"\n'
         result=subprocess.run([shutil.which('bash'),'-c',code],env=self.env|{'TERMUX_VERSION':'test'},text=True,capture_output=True,timeout=10)
         self.assertEqual(result.returncode,0,result.stderr)
-        self.assertEqual(result.stdout.splitlines(),['pi','dsh','lmm','codex','claude-code','codewhale'])
+        self.assertEqual(result.stdout.splitlines(),['pi','dsh','lmm','codex','claude-code','codewhale','magpie'])
 
     def test_flat_layout_and_size_budget(self):
         for path in ('templates','tools','docs','versions.json','generate.py'):
