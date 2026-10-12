@@ -1,0 +1,84 @@
+name: Prepare Magpie menu update
+on:
+  push:
+    branches: [feat/magpie-installers]
+permissions:
+  contents: read
+jobs:
+  prepare:
+    if: github.repository == 'TokenNotIncluded/lmm-scripts'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      - name: Existing offline contracts before menu changes
+        run: |
+          python3 test.py
+          python3 test-ai-tools.py
+      - name: Patch menus, existing expectations and README
+        env:
+          INSTALLER_REV: ${{ github.sha }}
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+          import re
+          
+          revision = os.environ['INSTALLER_REV']
+          assert re.fullmatch(r'[0-9a-f]{40}', revision)
+          
+          def replace(path, old, new):
+              file = Path(path)
+              text = file.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected one match, got {count}: {old!r}')
+              file.write_text(text.replace(old, new))
+          
+          replace('menu.sh', 'cherry-studio ollama uv)', 'cherry-studio ollama uv magpie)')
+          replace('menu.sh', 'tools=(pi dsh lmm codex claude-code codewhale);', 'tools=(pi dsh lmm codex claude-code codewhale magpie);')
+          replace('menu.sh', '    revision=873bb8de2d9af00fb2a5fbb592b3da094e665271', '    revision=' + revision)
+          replace('menu.sh', '    case "$tool" in pi|dsh|lmm|codex|claude-code|cc-switch|clash-verge-rev|codewhale|opencode) ;; *) revision=main;; esac\n', '')
+          replace('menu.sh', '/$tool.sh") || continue', '/$tool.sh") || { printf \'Could not download %s.\\n\' "$tool" >&2; continue; }')
+          replace('menu.ps1', "'cherry-studio','ollama','uv')", "'cherry-studio','ollama','uv','magpie')")
+          replace('menu.ps1', "$revision = '873bb8de2d9af00fb2a5fbb592b3da094e665271'", "$revision = '" + revision + "'")
+          replace('menu.ps1', "        if ($tool -notin @('pi','dsh','lmm','codex','claude-code','cc-switch','clash-verge-rev','codewhale','opencode')) { $revision = 'main' }\n", '')
+          
+          # Existing contracts retain their original scope; only the menu expectations change.
+          if Path('test.py').exists():
+              replace('test.py', "result.stdout.splitlines(),['pi','dsh','lmm','codex','claude-code','codewhale']", "result.stdout.splitlines(),['pi','dsh','lmm','codex','claude-code','codewhale','magpie']")
+          if Path('test-ai-tools.py').exists():
+              replace('test-ai-tools.py', 'self.assertEqual(set(entries[9:]),set(ALL))', "self.assertEqual(set(entries[9:]),set(ALL) | {'magpie'})")
+          if Path('README.md').exists():
+              replace('README.md', '## 更多 AI 工具', '''## Magpie
+          
+          菜单第 **24** 项（Termux 第 **7** 项）安装或更新 [Magpie](https://github.com/yetone/magpie)，原有编号不变。
+          
+          - Linux / macOS / Termux：`bash magpie.sh`，复用官方安装器；Linux 自动选择桌面或终端版。
+          - Windows x64 / ARM64：`.\\magpie.ps1`，安装官方最新正式发行包并校验 SHA-256；`-Cli` 选择终端版。
+          - 重复运行同一脚本即可更新。不自动启动、登录、写入 API Key 或更改供应商配置。
+          
+          单独下载的菜单统一使用同一个固定脚本提交，不再混用旧版本和 `main`；`LMM_SCRIPTS_REV` 仍可显式覆盖。
+          安装目录、上游选项、平台条件和测试说明见 [MAGPIE.md](MAGPIE.md)。
+          
+          ## 更多 AI 工具''')
+          PY
+      - name: Offline regression checks
+        run: |
+          python3 test.py
+          python3 test-ai-tools.py
+          python3 test-magpie.py
+          shellcheck *.sh
+      - name: PowerShell offline checks
+        shell: pwsh
+        run: ./test-magpie.ps1
+      - name: Commit checked menu update
+        run: |
+          rm .github/workflows/magpie-prepare.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add menu.sh menu.ps1 README.md test.py test-ai-tools.py .github/workflows/magpie-prepare.yml
+          git commit -m 'feat: add Magpie menus and pin all wrapper downloads'
+          git push origin HEAD:feat/magpie-installers
