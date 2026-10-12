@@ -155,7 +155,7 @@ class ToolsTests(unittest.TestCase):
         result=subprocess.run([shutil.which('bash'),'-c',code],env=self.env,text=True,capture_output=True)
         entries=result.stdout.splitlines()
         self.assertEqual(entries[:9],['pi','dsh','lmm','codex','claude-code','cc-switch','clash-verge-rev','codewhale','opencode'])
-        self.assertEqual(set(entries[9:]),set(ALL))
+        self.assertEqual(set(entries[9:]),set(ALL) | {'magpie'})
         for name in ALL:
             self.assertTrue((ROOT/(name+'.sh')).is_file()); self.assertTrue((ROOT/(name+'.ps1')).is_file())
             self.assertIn("'"+name+"'",(ROOT/'menu.ps1').read_text())

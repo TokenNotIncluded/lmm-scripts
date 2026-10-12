@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 if ($args.Count) { throw 'Usage: .\menu.ps1' }
-$tools = @('pi','dsh','lmm','codex','claude-code','cc-switch','clash-verge-rev','codewhale','opencode','cursor-cli','grok-build','gemini','qwen-code','kimi','codebuddy','hermes','openclaw','astrbot','aider','cursor','cherry-studio','ollama','uv')
+$tools = @('pi','dsh','lmm','codex','claude-code','cc-switch','clash-verge-rev','codewhale','opencode','cursor-cli','grok-build','gemini','qwen-code','kimi','codebuddy','hermes','openclaw','astrbot','aider','cursor','cherry-studio','ollama','uv','magpie')
 $work = Join-Path ([IO.Path]::GetTempPath()) ("lmm-menu-" + [guid]::NewGuid())
 try {
   New-Item -ItemType Directory $work | Out-Null
@@ -34,8 +34,7 @@ try {
       if ($PSScriptRoot -and (Test-Path (Join-Path $PSScriptRoot $name))) {
         $path = Join-Path $PSScriptRoot $name
       } else {
-        $revision = '873bb8de2d9af00fb2a5fbb592b3da094e665271'
-        if ($tool -notin @('pi','dsh','lmm','codex','claude-code','cc-switch','clash-verge-rev','codewhale','opencode')) { $revision = 'main' }
+        $revision = '86391c6e604bdbbf1231770529c47d508eca7d45'
         if ($env:LMM_SCRIPTS_REV) { $revision = $env:LMM_SCRIPTS_REV }
         Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/TokenNotIncluded/lmm-scripts/$revision/$name" -OutFile $path
       }
