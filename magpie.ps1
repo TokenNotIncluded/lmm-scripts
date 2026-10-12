@@ -44,7 +44,8 @@ try {
     if ($actual -ine $expected) { throw 'Magpie SHA-256 mismatch; the existing installation was not changed.' }
     $target = Join-Path $BinDir 'magpie.exe'
     if ([IO.File]::Exists($target)) {
-        [IO.File]::Replace($download, $target, $null)
+        # PowerShell converts plain $null to an empty string for this .NET parameter.
+        [IO.File]::Replace($download, $target, [System.Management.Automation.Language.NullString]::Value)
     } else {
         [IO.File]::Move($download, $target)
     }
