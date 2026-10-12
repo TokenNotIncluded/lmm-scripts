@@ -240,7 +240,7 @@ process.exit(Number(process.env.TEST_CURL_EXIT||0));\n`;
     const result = f.runShell('--help');
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /Codewhale \+ LMM/);
-    assert.ok(f.calls()[0][1].some(arg => /319d9790ba026583ea226fb92b13b366b738c3ef\/codewhale.mjs/.test(arg)));
+    assert.ok(f.calls()[0][1].some(arg => /cdf32d6d0e612cb2e22ae93f2f25f744d6145617\/codewhale.mjs/.test(arg)));
   });
   test('truncated downloads fail before execution even when bytes were written', t => {
     const f = shellFixture(t); f.env.TEST_BAD_DOWNLOAD = '1'; f.env.TEST_CURL_EXIT = '18';
