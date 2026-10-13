@@ -188,4 +188,44 @@ try {
   Remove-Item Function:Read-Host -ErrorAction SilentlyContinue
   Remove-Item -LiteralPath $menuWork -Recurse -Force -ErrorAction SilentlyContinue
 }
+# Windows SSH setup contracts: no real service or firewall changes.
+$sshFixture = @'
+$env:OS = 'Windows_NT'
+$global:SshInstalled = $true
+$global:SshRuleExists = $true
+$global:SshRestricted = $false
+function whoami.exe { if ($args.Count) { 'S-1-16-12288' } else { 'PC\user' }; $global:LASTEXITCODE=0 }
+function Get-WindowsCapability { [pscustomobject]@{State=$(if ($global:SshInstalled) { 'Installed' } else { 'NotPresent' })} }
+function Add-WindowsCapability { $global:SshInstalled=$true; [pscustomobject]@{RestartNeeded=$false} }
+function Get-NetFirewallRule { if ($global:SshRuleExists) { [pscustomobject]@{Name='OpenSSH-Server-In-TCP'} } }
+function Set-NetFirewallRule {
+  param($Name,$Enabled,$Direction,$Action,$Profile,$RemoteAddress)
+  if ($Name -ne 'OpenSSH-Server-In-TCP' -or $Enabled -ne 'True' -or $Direction -ne 'Inbound' -or $Action -ne 'Allow' -or $Profile -ne 'Private' -or $RemoteAddress -ne 'LocalSubnet') { throw 'unsafe firewall scope' }
+  $global:SshRestricted=$true
+}
+function Get-NetFirewallPortFilter { [pscustomobject]@{Name='filter'} }
+function Set-NetFirewallPortFilter {
+  param($Protocol,$LocalPort)
+  if ($Protocol -ne 'TCP' -or $LocalPort -ne 22) { throw 'wrong SSH port' }
+}
+function New-NetFirewallRule {
+  param($Name,$DisplayName,$Enabled,$Direction,$Action,$Protocol,$LocalPort,$Profile,$RemoteAddress)
+  if ($Protocol -ne 'TCP' -or $LocalPort -ne 22) { throw 'wrong SSH port' }
+  Set-NetFirewallRule -Name $Name -Enabled $Enabled -Direction $Direction -Action $Action -Profile $Profile -RemoteAddress $RemoteAddress
+}
+function Start-Service { if (-not $global:SshRestricted) { throw 'started before firewall restriction' }; Write-Output 'started-safely' }
+function Get-Service { [pscustomobject]@{Status='Running'} }
+function Get-NetIPAddress { [pscustomobject]@{InterfaceAlias='USB';IPAddress='192.168.42.2'} }
+function Disable-NetFirewallRule { Write-Host 'rule-disabled' }
+function Stop-Service { Write-Host 'service-stopped' }
+'@
+Check 'ssh.ps1' $sshFixture 0 '(?s)started-safely.*PC\\user.*192.168.42.2'
+Check 'ssh.ps1' ($sshFixture+"`n`$global:SshInstalled=`$false; `$global:SshRuleExists=`$false") 0 '(?s)Installing Windows OpenSSH.*started-safely'
+Check 'ssh.ps1' ($sshFixture+"`nfunction whoami.exe { 'S-1-16-8192'; `$global:LASTEXITCODE=0 }") 1 'Administrator'
+Check 'ssh.ps1' ($sshFixture+"`n`$env:OS='Linux'") 1 'requires Windows'
+Check 'ssh.ps1' ($sshFixture+"`n`$global:SshInstalled=`$false; function Add-WindowsCapability { throw 'install-failed' }; function Start-Service { throw 'must-not-start' }") 1 'install-failed'
+Check 'ssh.ps1' ($sshFixture+"`n`$global:SshInstalled=`$false; function Add-WindowsCapability { [pscustomobject]@{RestartNeeded=`$true} }") 1 'Restart Windows'
+Check 'ssh.ps1' ($sshFixture+"`nfunction Set-NetFirewallRule { throw 'firewall-failed' }; function Start-Service { throw 'must-not-start' }") 1 'firewall-failed'
+Check 'ssh.ps1' ($sshFixture+"`nfunction Get-WindowsCapability { throw 'must-not-install' }") 0 '(?s)rule-disabled.*service-stopped' '-Action stop'
+Check 'ssh.ps1' "function whoami.exe { throw 'must-not-check-admin' }" 0 'Usage:' '-Action help'
 Write-Output "PowerShell syntax and $checks command-contract checks passed."

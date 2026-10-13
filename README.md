@@ -106,6 +106,26 @@ DSH 安装官方 npm `latest` 宿主和 pnpm，LMM 插件安装当前 GitHub Rel
 
 安装后运行 `opencode auth login --provider lmm`，选择 **Sign in with LMM (OAuth)**，在浏览器授权，然后启动或重启 OpenCode。安装器不登录、不保存 API Key、不发起付费请求。服务端需要注册 `lmm-opencode` OAuth 客户端；本地安装与宿主加载验证不代表线上授权、余额和实际模型调用已经通过。
 
+## Windows SSH（手机连接电脑）
+
+先开启手机的 USB 网络共享，或让手机与电脑连接同一个可信局域网。电脑打开 **PowerShell（管理员）**，执行：
+
+```powershell
+irm https://raw.githubusercontent.com/TokenNotIncluded/lmm-scripts/main/ssh.ps1 | iex
+```
+
+`ssh.ps1` 安装 Windows 自带的 OpenSSH Server、启动 `sshd`，并将标准防火墙规则限制为 **Private + LocalSubnet + TCP 22**。安装可能需要联网；安装要求重启时会停止并提示重新运行。只把 USB 共享或其他可信连接手动设为「专用网络」；脚本不自动更改网络类型、不添加开机启动、不修改 SSH 认证配置、不写密码或授权密钥。已有的自定义 SSH 防火墙规则不受管理，因此本脚本不能保证它们没有额外放行。
+
+执行后显示用户名和 IPv4 地址；选择 USB 共享或可信局域网对应的地址用于连接。**启动服务不等于手机已经获得登录授权**，还需要 Windows 账户密码（不是 Windows Hello PIN）或另行配置 SSH 公钥。不要把密码发到聊天中，不需要路由器端口转发。
+
+停止 SSH 并禁用标准入站规则（管理员 PowerShell）：
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/TokenNotIncluded/lmm-scripts/main/ssh.ps1))) -Action stop
+```
+
+`test.ps1` 覆盖模拟安装、权限检查、防火墙范围与启动顺序、失败停止及停用流程；这些测试不代表 Windows 真机连接已经通过。
+
 ## 环境
 
 Unix 入口需要 Bash、curl。Pi 主程序的依赖提示由官方处理；Pi LMM 插件和 DSH 需要 Node 22.19+（22.x）或 24+、npm；Codewhale LMM 适配器需要 Node 22+ 和 npm。不修改 npm registry。
