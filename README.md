@@ -90,7 +90,7 @@ Pi 主程序通过官方最新安装器安装；脚本用 npm 的 `@alpha` 入�
 
 DSH 安装官方 npm `latest` 宿主和 pnpm，LMM 插件安装当前 GitHub Release 的已构建包；其当前官方 README 使用 npx，没有现行的独立安装脚本，不能拿归档记录中的旧脚本替代。
 
-`dsh.sh` / `dsh.ps1` 默认配置 CLI 的 `web` profile，可传入其他 profile。宿主使用官方 `latest`，插件通过 GitHub 当前 Release 解析版本化下载链接，避免安装过时 npm 预览包或缺少构建文件的源码。最新插件已验证官方 DSH `0.2.0-rc.2`，此版本是验证基线，没有人为上限。官方 DSH Desktop `0.1.7-alpha.2` 使用独立的 `desktop` profile，应在桌面端“插件”页安装 `@tokennotincluded/dsh-lmm-provider@0.1.0-alpha.4`；CLI 安装不会进入桌面端。
+`dsh.sh` / `dsh.ps1` 默认配置 CLI 的 `web` profile，可传入其他 profile。宿主使用官方 `latest`，插件通过 GitHub 当前 Release 解析版本化下载链接，避免安装过时 npm 预览包或缺少构建文件的源码。最新插件已验证官方 DSH `0.2.0-rc.2`，此版本是验证基线，没有人为上限。官方 DSH Desktop `0.1.7-alpha.2` 使用独立的 `desktop` profile，CLI 安装不会进入桌面端。本次新版插件仅验收 CLI/web 安装路径；旧桌面兼容性记录不作为新版桌面验收。
 
 原有安装器不写供应商配置、不登录账号、不启用系统代理或 TUN。Codewhale 默认 `setup` 会引导用户在浏览器确认 OAuth；`install` 只安装、不登录。两者都不覆盖原配置，见 [Codewhale 安装与配置](CODEWHALE.md)。
 
