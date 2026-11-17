@@ -10,6 +10,6 @@ temp_root=${TMPDIR:-/tmp}
 if [[ -n ${TERMUX_VERSION:-} || ${PREFIX:-} == */com.termux/files/usr ]]; then temp_root=${TMPDIR:-${PREFIX:-/data/data/com.termux/files/usr}/tmp}; fi
 work=$(mktemp -d "$temp_root/lmm-codewhale.XXXXXX")
 trap 'rm -rf -- "$work"' EXIT
-curl --proto '=https' --proto-redir '=https' -fsSL 'https://raw.githubusercontent.com/TokenNotIncluded/lmm-scripts/cdf32d6d0e612cb2e22ae93f2f25f744d6145617/codewhale.mjs' -o "$work/codewhale.mjs"
-node -e 'const fs=require("node:fs"),crypto=require("node:crypto");if(crypto.createHash("sha256").update(fs.readFileSync(process.argv[1])).digest("hex")!==process.argv[2]){console.error("Codewhale setup script checksum mismatch; nothing was executed.");process.exit(1)}' "$work/codewhale.mjs" '4138c5d74f1dee3cf089a90bdeef649d42304de7f5f9cd83e28f7d3302f994fb'
+curl --proto '=https' --proto-redir '=https' -fsSL 'https://raw.githubusercontent.com/TokenNotIncluded/lmm-scripts/967563d3e00a53c9deaddb7276247407935598ad/codewhale.mjs' -o "$work/codewhale.mjs"
+node -e 'const fs=require("node:fs"),crypto=require("node:crypto");if(crypto.createHash("sha256").update(fs.readFileSync(process.argv[1])).digest("hex")!==process.argv[2]){console.error("Codewhale setup script checksum mismatch; nothing was executed.");process.exit(1)}' "$work/codewhale.mjs" 'e30adefd8b94d9806a437a98b9c669759c1c13e78a50485b43e68f98b854d2f7'
 node "$work/codewhale.mjs" "$@"
