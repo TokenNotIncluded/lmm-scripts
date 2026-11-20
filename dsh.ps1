@@ -195,7 +195,7 @@ function Find-DshPython {
   foreach ($candidate in @($candidates | Select-Object -Unique)) {
     if ($candidate -match '\\Microsoft\\WindowsApps\\') { continue }
     try { [void](Assert-DshPath $candidate $false) } catch { continue }
-    $result = @(& $candidate -I -c 'import json,platform,sys; print(json.dumps({"version":list(sys.version_info[:2]),"bits":platform.architecture()[0],"path":sys.executable}))' 2>$null)
+    $result = @(& $candidate -I -c 'import json,platform,sys; print(json.dumps(dict(version=list(sys.version_info[:2]),bits=platform.architecture()[0],path=sys.executable)))' 2>$null)
     if ($LASTEXITCODE) { continue }
     try { $info = ($result -join '') | ConvertFrom-Json } catch { continue }
     if ($info.version[0] -eq 3 -and $info.version[1] -ge 10 -and $info.bits -eq '64bit') {
@@ -228,7 +228,7 @@ function New-DshRuntime([string]$Id) {
     $venvPython = Join-Path $directory 'Scripts\python.exe'
     & $venvPython -I -m pip --isolated install --disable-pip-version-check --no-input --no-index --no-deps --no-cache-dir --only-binary=:all: --require-hashes -r $requirements | Out-Host
     if ($LASTEXITCODE) { throw "DSH wheel installation failed: $LASTEXITCODE" }
-    $probe = 'import importlib.metadata,json; import deepseek_harness_runtime as r; print(json.dumps({"version":importlib.metadata.version("deepseek-harness-runtime-bin"),"root":str(r.bundled_package_dir()),"runtime":str(r.bundled_runtime_path()),"argv":r.resolve_bundled_launch_args("exe")}))'
+    $probe = "import importlib.metadata,json; import deepseek_harness_runtime as r; print(json.dumps(dict(version=importlib.metadata.version('deepseek-harness-runtime-bin'),root=str(r.bundled_package_dir()),runtime=str(r.bundled_runtime_path()),argv=r.resolve_bundled_launch_args('exe'))))"
     $raw = @(& $venvPython -I -c $probe)
     if ($LASTEXITCODE) { throw 'Cannot inspect installed DSH runtime.' }
     $installed = ($raw -join '') | ConvertFrom-Json

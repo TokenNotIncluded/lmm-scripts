@@ -3,8 +3,9 @@ $source = Join-Path $PSScriptRoot 'dsh.ps1'
 $tokens = $null; $errors = $null
 $ast = [Management.Automation.Language.Parser]::ParseFile($source,[ref]$tokens,[ref]$errors)
 if ($errors.Count) { throw ($errors | Out-String) }
-# Load pure/file-management functions only. Do not execute the installer, npm,
-# Python, downloads, registry writes or the script's main action.
+# Load functions without executing the installer, npm, downloads, registry
+# writes or the main action. The argv regression uses an existing Python only;
+# it does not install a wheel or simulate a DSH host.
 foreach ($definition in $ast.FindAll({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst]},$false)) {
   . ([scriptblock]::Create($definition.Extent.Text))
 }
@@ -22,6 +23,26 @@ function Require([bool]$Condition,[string]$Message) {
 $work = Join-Path ([IO.Path]::GetTempPath()) ('lmm-dsh-managed-tests-' + [guid]::NewGuid())
 [void][IO.Directory]::CreateDirectory($work)
 try {
+  # Compare each production probe with the single argument received by a real
+  # interpreter under both PowerShell versions. No native-command mock is used.
+  $nativePython = Find-DshPython
+  $probes = @($ast.FindAll({
+    param($node)
+    $node -is [Management.Automation.Language.StringConstantExpressionAst] -and
+      ($node.Value.StartsWith('import json,platform,sys;') -or
+       $node.Value.StartsWith('import importlib.metadata,json;'))
+  },$true))
+  Require ($probes.Count -eq 2) 'The two production Python probes were not found.'
+  $echoScript = Join-Path $work 'argv-echo.py'
+  $expectedArg = Join-Path $work 'expected-argument.txt'
+  $encoding = New-Object Text.UTF8Encoding($false)
+  [IO.File]::WriteAllText($echoScript,'import pathlib,sys; sys.exit(0 if len(sys.argv) == 3 and sys.argv[2].encode() == pathlib.Path(sys.argv[1]).read_bytes() else 1)',$encoding)
+  foreach ($probe in $probes) {
+    [IO.File]::WriteAllText($expectedArg,$probe.Value,$encoding)
+    & $nativePython -I $echoScript $expectedArg $probe.Value
+    Require ($LASTEXITCODE -eq 0) 'A production Python probe changed at the native argv boundary.'
+  }
+
   # Real Windows path and junction regressions: no mocked path canonicalization.
   $guardRuntime = Join-Path $work 'not-created-runtime'
   $guardData = Join-Path $guardRuntime 'installs\version\profile'
