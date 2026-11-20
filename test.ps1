@@ -58,6 +58,8 @@ $dshTestRoot = Join-Path ([IO.Path]::GetTempPath()) ('lmm-dsh-tests-' + [guid]::
 New-Item -ItemType Directory -Path $dshTestRoot | Out-Null
 try {
   $npmSuccess = @'
+# Load built-in functions before registering the checksum mock.
+Import-Module Microsoft.PowerShell.Utility
 function npm.cmd { Write-Output ($args -join '|'); $global:LASTEXITCODE=0 }
 function dsh.cmd {
   if ($args[4] -notmatch '[\\/]21bc853b321906550cf529cecc83719e6d14fd70041cc7cb92e4aecd6316d3f1\.tgz$' -or -not (Test-Path -LiteralPath $args[4] -PathType Leaf)) { throw 'verified persistent package is missing' }
@@ -75,6 +77,8 @@ function Get-FileHash {
   $digest = if ([IO.File]::ReadAllText($LiteralPath) -eq 'fixture') { '21bc853b321906550cf529cecc83719e6d14fd70041cc7cb92e4aecd6316d3f1' } else { 'invalid' }
   [pscustomobject]@{Hash=$digest}
 }
+$hashCommand = Get-Command Get-FileHash
+if ($hashCommand.CommandType -ne 'Function' -or $hashCommand.ModuleName) { throw 'checksum fixture mock was not selected' }
 '@
   $npmSuccess = "`$env:DSH_HOME='" + $dshTestRoot.Replace("'","''") + "'`n" + $npmSuccess
   Check 'dsh.ps1' $npmSuccess 0 'plugin\|--profile\|headless\|add\|.*\.tgz\|--ignore-scripts' '-Profile headless'

@@ -169,7 +169,7 @@ class InstallTests(unittest.TestCase):
         self.assertEqual(result.returncode,0,result.stderr)
         self.assertEqual(self.calls()[0], ['npm',['install','-g','@deepseek-ai/dsh@latest','pnpm@latest']])
         package=self.home/'dsh/lmm-provider-packages'/(DSH_FIXTURE_SHA256+'.tgz')
-        self.assertEqual(self.calls()[-1], ['dsh',['plugin','--profile','headless','add',str(package),'--ignore-scripts']])
+        self.assertEqual(self.calls()[-1], ['dsh',['plugin','--profile','headless','add',str(package.resolve()),'--ignore-scripts']])
         self.assertEqual(package.read_bytes(),b'fixture')
         self.assertEqual(package.stat().st_mode & 0o777,0o600)
         self.assertEqual(list(package.parent.glob('.download.*')),[])
