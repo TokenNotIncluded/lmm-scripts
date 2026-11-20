@@ -32,7 +32,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: powershell
         run: .\test.ps1
-      - name: Real Windows CLI installs (DSH instrumented diagnostic)
+      - name: Real Windows CLI installs (official DSH wheel diagnostic)
         if: runner.os == 'Windows'
         shell: powershell
         run: |
@@ -52,7 +52,7 @@ jobs:
             }
             if ($LASTEXITCODE) { throw "$tool install failed: $LASTEXITCODE" }
           }
-          foreach ($command in @("$env:PI_CODING_AGENT_DIR\bin\pi.cmd",'dsh.cmd',"$env:CODEX_INSTALL_DIR\codex.exe","$HOME\.local\bin\claude.exe","$HOME\.local\bin\lmm.exe")) {
+          foreach ($command in @("$env:PI_CODING_AGENT_DIR\bin\pi.cmd","$env:RUNNER_TEMP\lmm-dsh-official-wheel-rc2\Scripts\dsh.exe","$env:CODEX_INSTALL_DIR\codex.exe","$HOME\.local\bin\claude.exe","$HOME\.local\bin\lmm.exe")) {
             & $command --version
             if ($LASTEXITCODE) { throw "$command failed: $LASTEXITCODE" }
           }
