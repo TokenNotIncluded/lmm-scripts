@@ -50,6 +50,9 @@ Check 'pi.ps1' ($piSetup+"`nfunction official-pi { if (`$args[0] -ne '--version'
 Check 'pi.ps1' ($piSetup+"`nfunction npm.cmd { Write-Output plugin-failed; `$global:LASTEXITCODE=7 }") 7 'plugin-failed'
 Check 'pi.ps1' "function Invoke-RestMethod { throw 'download-failed' }" 1 'download-failed'
 $npmFailure = @'
+# Exercise the preserved non-x64 npm route; managed x64 contracts run below.
+$env:PROCESSOR_ARCHITEW6432=''
+$env:PROCESSOR_ARCHITECTURE='ARM64'
 function npm.cmd { Write-Output 'npm failed'; $global:LASTEXITCODE=9 }
 function dsh.cmd { throw 'plugin must not run' }
 '@
@@ -58,6 +61,8 @@ $dshTestRoot = Join-Path ([IO.Path]::GetTempPath()) ('lmm-dsh-tests-' + [guid]::
 New-Item -ItemType Directory -Path $dshTestRoot | Out-Null
 try {
   $npmSuccess = @'
+$env:PROCESSOR_ARCHITEW6432=''
+$env:PROCESSOR_ARCHITECTURE='ARM64'
 # Load built-in functions before registering the checksum mock.
 Import-Module Microsoft.PowerShell.Utility
 function npm.cmd { Write-Output ($args -join '|'); $global:LASTEXITCODE=0 }
@@ -263,3 +268,8 @@ Check 'ssh.ps1' ($sshFixture+"`nfunction Set-NetFirewallRule { throw 'firewall-f
 Check 'ssh.ps1' ($sshFixture+"`nfunction Get-WindowsCapability { throw 'must-not-install' }") 0 '(?s)rule-disabled.*service-stopped' '-Action stop'
 Check 'ssh.ps1' "function whoami.exe { throw 'must-not-check-admin' }" 0 'Usage:' '-Action help'
 Write-Output "PowerShell syntax and $checks command-contract checks passed."
+
+if ($env:OS -eq 'Windows_NT') {
+  & (Join-Path $PSScriptRoot 'test-dsh-managed.ps1')
+  if ($LASTEXITCODE) { throw 'Managed DSH contract checks failed.' }
+}

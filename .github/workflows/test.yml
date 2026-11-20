@@ -64,20 +64,51 @@ jobs:
         shell: powershell
         run: |
           $env:PI_CODING_AGENT_DIR="$env:RUNNER_TEMP\pi-profile"
-          # Expose only this job's chosen install path; no persistent user PATH changes.
+          # Expose Pi's chosen path to this parent process.
           $env:PATH="$env:PI_CODING_AGENT_DIR\bin;$env:PATH"
           $env:DSH_HOME="$env:RUNNER_TEMP\dsh-profile"
           $env:CODEX_HOME="$env:RUNNER_TEMP\codex-profile"
           $env:CODEX_INSTALL_DIR="$env:RUNNER_TEMP\codex-bin"
           $env:CODEX_NON_INTERACTIVE='true'
-          foreach ($tool in @('pi','dsh','codex','claude-code','lmm')) {
-            Write-Host "Installing $tool"
-            & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ".\$tool.ps1"
-            if ($LASTEXITCODE) { throw "$tool install failed: $LASTEXITCODE" }
-          }
-          foreach ($command in @("$env:PI_CODING_AGENT_DIR\bin\pi.cmd",'dsh.cmd',"$env:CODEX_INSTALL_DIR\codex.exe","$HOME\.local\bin\claude.exe","$HOME\.local\bin\lmm.exe")) {
-            & $command --version
-            if ($LASTEXITCODE) { throw "$command failed: $LASTEXITCODE" }
+          $userPathBefore = [Environment]::GetEnvironmentVariable('Path','User')
+          try {
+            foreach ($tool in @('pi','dsh','codex','claude-code','lmm')) {
+              Write-Host "Installing $tool"
+              & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ".\$tool.ps1"
+              if ($LASTEXITCODE) { throw "$tool install failed: $LASTEXITCODE" }
+              if ($tool -eq 'dsh') {
+                # A child cannot update its parent's PATH. Select and prove the new
+                # persistent shim instead of accidentally invoking an old npm shim.
+                $managedDsh = Join-Path $HOME '.local\bin\dsh.cmd'
+                $env:PATH = (Split-Path -Parent $managedDsh) + ';' + $env:PATH
+                if ((Get-Command dsh.cmd -CommandType Application).Source -ine $managedDsh) {
+                  throw 'The real DSH check selected a different command.'
+                }
+              }
+            }
+            foreach ($command in @("$env:PI_CODING_AGENT_DIR\bin\pi.cmd",'dsh.cmd',"$env:CODEX_INSTALL_DIR\codex.exe","$HOME\.local\bin\claude.exe","$HOME\.local\bin\lmm.exe")) {
+              & $command --version
+              if ($LASTEXITCODE) { throw "$command failed: $LASTEXITCODE" }
+            }
+            & dsh.cmd plugin --profile web list --depth 0
+            if ($LASTEXITCODE) { throw 'The installed DSH profile could not be read.' }
+            $shimBefore = (Get-FileHash -LiteralPath $managedDsh -Algorithm SHA256).Hash
+            $keep = Join-Path $env:DSH_HOME '.lmm-installer-preserve-test'
+            [IO.File]::WriteAllText($keep,'retain this profile')
+            & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File .\dsh.ps1
+            if ($LASTEXITCODE) { throw 'Managed DSH repeat installation failed.' }
+            if ((Get-FileHash -LiteralPath $managedDsh -Algorithm SHA256).Hash -ne $shimBefore) {
+              throw 'Repeat installation changed the selected runtime.'
+            }
+            & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File .\dsh.ps1 -Action uninstall
+            if ($LASTEXITCODE -or (Test-Path -LiteralPath $managedDsh)) { throw 'Managed DSH uninstall failed.' }
+            if ([IO.File]::ReadAllText($keep) -cne 'retain this profile') { throw 'Uninstall changed profile data.' }
+            $package = Join-Path $env:DSH_HOME 'lmm-provider-packages\21bc853b321906550cf529cecc83719e6d14fd70041cc7cb92e4aecd6316d3f1.tgz'
+            if ((Get-FileHash -LiteralPath $package -Algorithm SHA256).Hash -ine '21bc853b321906550cf529cecc83719e6d14fd70041cc7cb92e4aecd6316d3f1') {
+              throw 'Uninstall changed the verified provider package.'
+            }
+          } finally {
+            [Environment]::SetEnvironmentVariable('Path',$userPathBefore,'User')
           }
   linux-libc:
     runs-on: ubuntu-latest

@@ -14,6 +14,16 @@ try {
     $name = $tools[$index-1] + '.ps1'
     $installerArgs = @()
     $tool = $tools[$index-1]
+    if ($tool -eq 'dsh') {
+      Write-Host '1  Install / update'
+      Write-Host '2  Roll back managed Windows host'
+      Write-Host '3  Uninstall managed Windows host (keep profiles)'
+      $action = Read-Host '0  Back'
+      if ($action -eq '1') { $installerArgs = @() }
+      elseif ($action -eq '2') { $installerArgs = @('-Action','rollback') }
+      elseif ($action -eq '3') { $installerArgs = @('-Action','uninstall') }
+      else { continue }
+    }
     if ($tool -eq 'codewhale') { $installerArgs = @('menu') }
     if ($tool -in @('cursor-cli','grok-build','gemini','qwen-code','kimi','codebuddy','hermes','openclaw','astrbot','aider')) {
       Write-Host '1  Install / update'
@@ -35,6 +45,9 @@ try {
         $path = Join-Path $PSScriptRoot $name
       } else {
         $revision = '86391c6e604bdbbf1231770529c47d508eca7d45'
+        if ($tool -eq 'dsh' -and -not $env:LMM_SCRIPTS_REV) {
+          throw 'This DSH draft has no published fixed source yet. Use the local checkout or an explicitly reviewed LMM_SCRIPTS_REV.'
+        }
         if ($env:LMM_SCRIPTS_REV) { $revision = $env:LMM_SCRIPTS_REV }
         Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/TokenNotIncluded/lmm-scripts/$revision/$name" -OutFile $path
       }

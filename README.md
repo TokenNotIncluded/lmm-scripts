@@ -16,7 +16,7 @@ irm https://raw.githubusercontent.com/TokenNotIncluded/lmm-scripts/main/menu.ps1
 | 文件名（`.sh` / `.ps1`） | 安装方式 | 启动 |
 |---|---|---|
 | `pi` | 官方安装器安装 Pi，再通过 npm 的 LMM 安装入口清理重复来源 | `pi`，然后 `/login` |
-| `dsh` | npm + pnpm，安装当前 GitHub Release 的 LMM 插件；默认 web profile | `dsh web` |
+| `dsh` | Windows x64 官方 wheel 草稿；其它平台保留 npm + pnpm。LMM 插件固定 alpha.9，默认 web profile | `dsh web` |
 | `codex` | 官方原生安装器，参数直接传给官方 | `codex` |
 | `claude-code` | 官方原生安装器，参数直接传给官方 | `claude` |
 | `cc-switch` | Linux 发行包/AUR，macOS Homebrew，Windows 官方 MSI | 桌面应用 |
@@ -88,9 +88,37 @@ astrbot run
 
 Pi 主程序通过官方最新安装器安装；脚本用 npm 的 `@alpha` 入口执行 LMM 插件来源切换，实际安装 GitHub 最新 `main`。入口先确认安装成功，再清理同插件的其他来源；保留无关扩展，失败时保留旧来源。不设 Pi 宿主版本上限。安装 LMM 插件另需 Node.js 22.19+ 和 npm。Pi 的安装位置、权限和 Windows Git Bash 仍由官方安装器处理。
 
-DSH 安装官方 npm `latest` 宿主和 pnpm，LMM 插件安装当前 GitHub Release 的已构建包；其当前官方 README 使用 npx，没有现行的独立安装脚本，不能拿归档记录中的旧脚本替代。
+### Windows x64 DSH 草稿：尚未发布、尚未通过产品门槛
 
-`dsh.sh` / `dsh.ps1` 默认配置 CLI 的 `web` profile，可传入其他 profile。宿主使用官方 `latest`，插件通过 GitHub 当前 Release 解析版本化下载链接，避免安装过时 npm 预览包或缺少构建文件的源码。最新插件已验证官方 DSH `0.2.0-rc.2`，此版本是验证基线，没有人为上限。官方 DSH Desktop `0.1.7-alpha.2` 使用独立的 `desktop` profile，CLI 安装不会进入桌面端。本次新版插件仅验收 CLI/web 安装路径；旧桌面兼容性记录不作为新版桌面验收。
+这份草稿把 Windows x64 的 DSH 宿主改为官方完整 Python wheel，固定到 `0.2.2-rc.2`。独立控制 run [44786638207](https://github.com/TokenNotIncluded/lmm-scripts/actions/runs/44786638207) 已验证完整 wheel、CLI、LMM 插件 Web 状态和清理；它使用临时 venv，不能证明本草稿的持久安装、回退或卸载已通过。本草稿仍超过原 50,000 字节安装代码预算，原断言没有放宽，PR12 与公开安装入口尚未切换。
+
+Windows x64 需要已有的 **64 位 Python 3.10 或更新版本**，以及 Node/npm。安装器只查找现有解释器，不安装 Python，不升级 pip，不改变 registry。wheel 的固定 URL、整包 SHA-256 和完整 runtime、ripgrep、`downloads.json` 摘要均在脚本中；pip 使用本地、带摘要的 wheel，并关闭依赖解析和索引访问。pnpm 仍通过原 `npm.cmd install -g pnpm@latest` 安装。其它 Windows 架构和 Linux/macOS 保留原 npm 宿主路线；这次 wheel 控制没有新增它们的运行资格。
+
+运行文件位于 `$HOME\.local\share\lmm-dsh\installs\版本-摘要`，命令位于 `$HOME\.local\bin\dsh.cmd`。venv 在最终目录创建，不能移动该目录或移除它依赖的基础 Python。安装器验证宿主和插件后才切换命令，并将共享 bin 目录加入用户 PATH；已有父终端不会收到子进程的 PATH 更新，需要新开终端，或在当前 PowerShell 显式前置 `$HOME\.local\bin`。CI 必须核对所调用的确实是这个 shim，不能由旧 npm shim 代替通过。
+
+受管 Windows 模式要求数据目录与 runtime 根物理分离：两者不能相同，也不能互为祖先或后代。检查在任何 runtime/profile 写入之前进行，拒绝数据路径或已有祖先中的 junction、符号链接及其它 reparse point；不存在的尾段也要通过同一重叠检查，并在 runtime 创建后、首次 profile 写入前按实际目录身份再次检查。已有祖先使用 Windows 目录句柄解析为卷 GUID 路径，避免把盘符或已存在的短名别名当成不同目录。UNC、设备路径、无法解析的卷及尚不存在的短名样式尾段不受此模式支持，请选择普通本地目录；非 x64 的原 npm 分支不受这项新限制影响。
+
+安装器拒绝覆盖 PATH 中其它 DSH 命令。请先自行移除旧宿主的 PATH 冲突；脚本不会执行 `npm uninstall`，也不会删除其文件或 profile。默认仍使用原 `DSH_HOME`，未设置时使用 `$HOME\.dsh`。首次遇到未知的非空数据目录会停止：先备份，再选择新的 `DSH_HOME`；只有明确接受使用原数据时才传 `-UseExistingProfile`。这个参数不是迁移或降级兼容性保证，脚本不会改写旧配置来适配 rc.2。
+
+本地受审源码的入口如下。远程菜单在新 DSH 源的真实固定提交发布前关闭该分支；可从本地完整仓库使用，或显式设置已审核的 `LMM_SCRIPTS_REV`。发布流程必须用真实提交补齐菜单 pin，不使用猜测的 SHA 或浮动 `main`。
+
+```powershell
+.\dsh.ps1
+.\dsh.ps1 -Profile headless
+.\dsh.ps1 -UseExistingProfile
+.\dsh.ps1 -Action rollback
+.\dsh.ps1 -Action uninstall
+```
+
+重复安装会校验现有完整 runtime，并保留验证过的 provider TGZ。对仍能执行 finally 的普通异常，脚本尝试清理本次创建的 runtime，原命令保持或恢复；已经由官方插件管理器写入的 profile 不作私自回滚。回退仅接受本安装器认识的完整 payload 合同，且需要一个不同的已记录上一版本；当前只有 rc.2，没有已验证的跨版本回退目标，命令会明确拒绝。新增宿主版本时必须同时加入旧版回退合同与真实升级验证，不能仅替换一个版本号。
+
+硬终止、断电或进程被强杀不能保证执行 finally，可能留下没有完整 receipt 的目录；下一次安装或卸载会拒绝把它认作受管 runtime。先保留并备份 profile 和现场记录，再人工核查该目录的来源与内容；不能仅凭目录名把未知目录直接删除，也不承诺自动修复。
+
+卸载仅移除可识别的受管 shim 和 runtime，不删除 `DSH_HOME`、profile、provider TGZ、Python 或 pnpm；共享 `.local\bin` PATH 项也保留给 Claude/LMM 等命令。卸载在删除任何 shim 前完成全部 receipt、元数据路径及子树链接预检，实际删除时仍重复链接检查。损坏、未知的元数据或链接目录会拒绝自动处理。请先关闭正在运行的 DSH；文件被占用时会明确失败，不杀用户进程。卸载后重新使用非空 profile 仍需上述显式确认。
+
+LMM 插件固定为 [v0.1.0-alpha.9 的已构建 TGZ](https://github.com/TokenNotIncluded/dsh-lmm-provider/releases/tag/v0.1.0-alpha.9)，不通过 `latest` 解析预发布版本。其 SHA-256 验证、损坏缓存拒绝及 `--ignore-scripts` 插件参数保持。这里的 `--ignore-scripts` 只作用于原插件安装，不跳过宿主发行物所需步骤。CLI 的默认 profile 是 `web`；DSH Desktop 使用独立 profile，本轮未取得新版 Desktop 运行资格。
+
+官方依据：[Python venv 的不可移动约束](https://docs.python.org/3/library/venv.html)、[pip 带摘要安装](https://pip.pypa.io/en/stable/topics/secure-installs/)、[官方 rc.2 发布源](https://github.com/deepseek-ai/deepseek-harness/tree/ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c)、[官方完整 Windows wheel](https://pypi.org/project/deepseek-harness-runtime-bin/0.2.2rc2/)。
 
 原有安装器不写供应商配置、不登录账号、不启用系统代理或 TUN。Codewhale 默认 `setup` 会引导用户在浏览器确认 OAuth；`install` 只安装、不登录。两者都不覆盖原配置，见 [Codewhale 安装与配置](CODEWHALE.md)。
 
@@ -144,9 +172,9 @@ Codex/Claude 使用**已有的 PRoot Linux 环境**，不是 Android 原生二�
 
 ## 从旧版切换
 
-旧的 `--network`、`--root`、`--check`、`--update` 等自定义参数已移除；不要继续传入。Codex/Claude 只接受各自官方参数，DSH 可传 profile。旧版 `lmm-tools` 目录不会被删除；从 PATH 中移除旧的 `lmm-tools/bin`，避免旧启动器优先于新安装。配置和账号数据不迁移、不清空。
+旧的 `--network`、`--root`、`--check`、`--update` 等自定义参数已移除；不要继续传入。Codex/Claude 只接受各自官方参数，DSH 可传 profile；Windows x64 草稿另有受管回退和卸载动作。旧版 `lmm-tools` 目录不会被删除；从 PATH 中移除旧的 `lmm-tools/bin`，避免旧启动器优先于新安装。配置和账号数据不迁移、不清空。
 
-所有安装代码平铺在根目录；两个 Unix 桌面入口共用 `desktop.sh`，Codewhale 与 OpenCode 两个平台入口分别共用 `codewhale.mjs` 和 `opencode.mjs`。本地运行用同目录文件，单独下载运行时用固定 Git 提交获取共用脚本；Codewhale 和 OpenCode 额外校验 SHA-256。菜单原有入口继续使用固定提交，新增入口在单文件菜单的远程回退中使用 `main`；可通过 `LMM_SCRIPTS_REV=完整提交`（PowerShell 用 `$env:LMM_SCRIPTS_REV`）指定所有远程菜单入口的版本。发布前新入口只能从本地仓库运行，远程回退需等这些文件推送后才可用。不维护生成器或独立哈希清单。
+所有安装代码平铺在根目录；两个 Unix 桌面入口共用 `desktop.sh`，Codewhale 与 OpenCode 两个平台入口分别共用 `codewhale.mjs` 和 `opencode.mjs`。本地运行用同目录文件，单独下载运行时用固定 Git 提交获取共用脚本；Codewhale 和 OpenCode 额外校验 SHA-256。菜单远程入口继续使用固定提交；本草稿的 DSH 远程入口在新的真实 pin 发布前停止执行；可通过 `LMM_SCRIPTS_REV=完整提交`（PowerShell 用 `$env:LMM_SCRIPTS_REV`）指定所有远程菜单入口的版本。发布前新入口只能从本地仓库运行，远程回退需等这些文件推送后才可用。不维护生成器或独立哈希清单。
 
 ## 依据与测试
 
