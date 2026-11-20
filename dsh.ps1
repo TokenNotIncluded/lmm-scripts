@@ -379,7 +379,7 @@ try {
     $profileKeys = @()
     if (Test-Path -LiteralPath $profileFile) {
       [void](Assert-DshPath $profileFile $false)
-      $profileKeys = @([IO.File]::ReadAllText($profileFile) | ConvertFrom-Json)
+      $profileKeys = @(([IO.File]::ReadAllText($profileFile) | ConvertFrom-Json))
       if (@($profileKeys | Where-Object { $_ -notmatch '^[0-9a-f]{64}$' }).Count) { throw 'Invalid managed DSH profile metadata.' }
     }
     $profileKey = Get-DshProfileKey $dshRoot

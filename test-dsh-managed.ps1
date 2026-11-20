@@ -43,6 +43,70 @@ try {
     Require ($LASTEXITCODE -eq 0) 'A production Python probe changed at the native argv boundary.'
   }
 
+  & {
+    # Use the production writer, reader and existing-home guard with real files.
+    # Windows PowerShell 5.1 can emit a JSON array as one pipeline object.
+    $readNodes = @($ast.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.IfStatementAst] -and
+        $node.Extent.Text.StartsWith('if (Test-Path -LiteralPath $profileFile)') -and
+        $node.Extent.Text.Contains('ConvertFrom-Json')
+    },$true))
+    $writeNodes = @($ast.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.CommandAst] -and
+        $node.Extent.Text.StartsWith('Write-DshAtomic $profileFile (ConvertTo-Json')
+    },$true))
+    $guardNodes = @($ast.FindAll({
+      param($node)
+      $node -is [Management.Automation.Language.IfStatementAst] -and
+        $node.Extent.Text.StartsWith('if ((Test-Path -LiteralPath $dshRoot)') -and
+        $node.Extent.Text.Contains('$profileKeys -notcontains $profileKey')
+    },$true))
+    Require ($readNodes.Count -eq 1 -and $writeNodes.Count -eq 1 -and $guardNodes.Count -eq 1) 'Production profile metadata statements were not found uniquely.'
+    $readProfiles = [scriptblock]::Create($readNodes[0].Extent.Text)
+    $writeProfiles = [scriptblock]::Create($writeNodes[0].Extent.Text)
+    $recognizeProfile = [scriptblock]::Create($guardNodes[0].Extent.Text)
+    $profileFile = Join-Path $work 'roundtrip-profiles.json'
+    $profileA = New-DshDirectory (Join-Path $work 'roundtrip-a')
+    $profileB = New-DshDirectory (Join-Path $work 'roundtrip-b')
+    $unknownProfile = New-DshDirectory (Join-Path $work 'roundtrip-unknown')
+    foreach ($directory in @($profileA,$profileB,$unknownProfile)) {
+      [IO.File]::WriteAllText((Join-Path $directory 'keep'),'retain profile data')
+    }
+    $UseExistingProfile = $false
+    $dshRoot = $profileA
+    $profileKey = Get-DshProfileKey $dshRoot
+    $firstKey = $profileKey
+    $profileKeys = @()
+    . $writeProfiles
+    $profileKeys = @()
+    . $readProfiles
+    Require ($profileKeys.Count -eq 1 -and ($profileKeys[0] -is [string]) -and $profileKeys -contains $firstKey) 'A saved single profile key did not round trip as a string.'
+    . $recognizeProfile
+    Require ([IO.File]::ReadAllText((Join-Path $profileA 'keep')) -ceq 'retain profile data') 'Recognizing a saved profile changed its data.'
+
+    $dshRoot = $profileB
+    $profileKey = Get-DshProfileKey $dshRoot
+    $secondKey = $profileKey
+    . $writeProfiles
+    $profileKeys = @()
+    . $readProfiles
+    Require ($profileKeys.Count -eq 2 -and ($profileKeys[0] -is [string]) -and ($profileKeys[1] -is [string]) -and $profileKeys -contains $firstKey -and $profileKeys -contains $secondKey) 'Two saved profile keys did not round trip as strings.'
+    foreach ($directory in @($profileA,$profileB)) {
+      $dshRoot = $directory
+      $profileKey = Get-DshProfileKey $dshRoot
+      . $recognizeProfile
+    }
+    $metadataBefore = [IO.File]::ReadAllText($profileFile)
+    $dshRoot = $unknownProfile
+    $profileKey = Get-DshProfileKey $dshRoot
+    Expect-Failure { . $recognizeProfile } 'unrecognized installation'
+    Require ([IO.File]::ReadAllText($profileFile) -ceq $metadataBefore -and [IO.File]::ReadAllText((Join-Path $unknownProfile 'keep')) -ceq 'retain profile data') 'Refusing an unknown profile changed metadata or profile data.'
+    Write-DshAtomic $profileFile '["not-a-profile-key"]'
+    Expect-Failure { . $readProfiles } 'Invalid managed DSH profile metadata'
+  }
+
   # Real Windows path and junction regressions: no mocked path canonicalization.
   $guardRuntime = Join-Path $work 'not-created-runtime'
   $guardData = Join-Path $guardRuntime 'installs\version\profile'
