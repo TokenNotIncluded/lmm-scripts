@@ -7,6 +7,6 @@ $pi = Join-Path (Get-PiBinDir) 'pi.cmd'
 if ($LASTEXITCODE) { exit $LASTEXITCODE }
 $env:LMM_PI_BIN = $pi
 $plugin = '@tokennotincluded/pi-lmm-provider@0.1.0-alpha.7'
-npm.cmd exec --yes --package="$plugin" -- lmm-pi-provider "npm:$plugin"
+npm.cmd exec --yes --package="$plugin" '--' lmm-pi-provider "npm:$plugin"
 exit $LASTEXITCODE
 '@))
