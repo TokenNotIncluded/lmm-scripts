@@ -112,7 +112,7 @@ function Write-DshAtomic([string]$Path,[string]$Text) {
       $stream.Write($bytes,0,$bytes.Length)
       $stream.Flush()
     } finally { $stream.Dispose() }
-    if (Test-Path -LiteralPath $Path) { [IO.File]::Replace($temp,$Path,$null) }
+    if (Test-Path -LiteralPath $Path) { [IO.File]::Replace($temp,$Path,[NullString]::Value) }
     else { [IO.File]::Move($temp,$Path) }
   } finally {
     if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp -Force }
