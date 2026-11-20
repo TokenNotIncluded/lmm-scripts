@@ -1,5 +1,6 @@
 """Offline command-contract tests. No packages are installed."""
 import json
+import hashlib
 import os
 from pathlib import Path
 import sys
@@ -9,6 +10,9 @@ import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parent
+DSH_SHA256 = '21bc853b321906550cf529cecc83719e6d14fd70041cc7cb92e4aecd6316d3f1'
+DSH_FIXTURE_SHA256 = hashlib.sha256(b'fixture').hexdigest()
+DSH_URL = 'https://github.com/TokenNotIncluded/dsh-lmm-provider/releases/download/v0.1.0-alpha.9/dsh-lmm-provider.tgz'
 STUB = r'''#!/usr/bin/env python3
 import json, os, sys
 from pathlib import Path
@@ -39,9 +43,11 @@ if name == 'curl':
         print('printf "%s\\n" "$@" > "$HOME/received-args"')
     elif url.endswith('/desktop.sh'):
         print(Path(os.environ['PROJECT'], 'desktop.sh').read_text())
-    elif url == 'https://github.com/TokenNotIncluded/dsh-lmm-provider/releases/latest':
+    elif '/TokenNotIncluded/dsh-lmm-provider/releases/' in url:
+        assert url == 'https://github.com/TokenNotIncluded/dsh-lmm-provider/releases/download/v0.1.0-alpha.9/dsh-lmm-provider.tgz'
         if os.environ.get('NO_ASSET'): sys.exit(22)
-        print(os.environ.get('DSH_ASSET_URL','https://github.com/TokenNotIncluded/dsh-lmm-provider/releases/tag/v0.1.0-alpha.5'))
+        Path(args[args.index('-o')+1]).write_bytes(b'altered' if os.environ.get('DSH_BAD_BYTES') else b'fixture')
+        if os.environ.get('DSH_TRUNCATED'): sys.exit(18)
     elif '/releases/latest' in url:
         print(json.dumps({'assets': [] if os.environ.get('NO_ASSET') else [
             {'name': 'Tool-amd64.deb', 'browser_download_url': 'https://github.com/official/tool.deb'},
@@ -99,7 +105,16 @@ class InstallTests(unittest.TestCase):
         path.chmod(0o755)
 
     def run_script(self,name,*args,**env):
-        return subprocess.run([shutil.which('bash'),str(ROOT/name),*args],env=self.env|env,text=True,capture_output=True,timeout=10)
+        script=ROOT/name
+        if name=='dsh.sh':
+            # Only this offline copy substitutes the expected hash for fixture bytes.
+            text=script.read_text()
+            self.assertEqual(text.count(DSH_SHA256),1)
+            self.assertIn(DSH_URL,text)
+            script=self.home/'dsh.sh'
+            script.write_text(text.replace(DSH_SHA256,DSH_FIXTURE_SHA256))
+            env={'DSH_HOME':str(self.home/'dsh'),**env}
+        return subprocess.run([shutil.which('bash'),str(script),*args],env=self.env|env,text=True,capture_output=True,timeout=10)
 
     def calls(self):
         return [json.loads(line) for line in self.log.read_text().splitlines()]
@@ -150,17 +165,69 @@ class InstallTests(unittest.TestCase):
         self.assertEqual(self.calls(),[['pkg',['install','nodejs','npm','git']]])
 
     def test_dsh_keeps_documented_commands_and_lmm_plugin(self):
-        self.assertEqual(self.run_script('dsh.sh','headless').returncode,0)
+        result=self.run_script('dsh.sh','headless')
+        self.assertEqual(result.returncode,0,result.stderr)
         self.assertEqual(self.calls()[0], ['npm',['install','-g','@deepseek-ai/dsh@latest','pnpm@latest']])
-        self.assertEqual(self.calls()[-1], ['dsh',['plugin','--profile','headless','add','https://github.com/TokenNotIncluded/dsh-lmm-provider/releases/download/v0.1.0-alpha.5/dsh-lmm-provider.tgz','--ignore-scripts']])
+        package=self.home/'dsh/lmm-provider-packages'/(DSH_FIXTURE_SHA256+'.tgz')
+        self.assertEqual(self.calls()[-1], ['dsh',['plugin','--profile','headless','add',str(package),'--ignore-scripts']])
+        self.assertEqual(package.read_bytes(),b'fixture')
+        self.assertEqual(package.stat().st_mode & 0o777,0o600)
+        self.assertEqual(list(package.parent.glob('.download.*')),[])
+        download=next(args for name,args in self.calls() if name=='curl')
+        self.assertIn(DSH_URL,download)
+        self.assertIn('--proto-redir',download)
+        # A second install must reuse the same verified persistent file.
+        self.assertEqual(self.run_script('dsh.sh','headless').returncode,0)
+        self.assertEqual(package.read_bytes(),b'fixture')
+        self.assertEqual(list(package.parent.glob('.download.*')),[])
 
     def test_dsh_missing_release_does_not_install_plugin(self):
         self.assertNotEqual(self.run_script('dsh.sh',NO_ASSET='1').returncode,0)
         self.assertTrue(all(name!='dsh' for name,_ in self.calls()))
 
-    def test_dsh_rejects_foreign_release_urls(self):
-        self.assertNotEqual(self.run_script('dsh.sh',DSH_ASSET_URL='https://evil.invalid/plugin.tgz').returncode,0)
+    def test_dsh_rejects_altered_release_bytes(self):
+        result=self.run_script('dsh.sh',DSH_BAD_BYTES='1')
+        self.assertNotEqual(result.returncode,0)
+        self.assertIn('checksum mismatch',result.stderr)
         self.assertTrue(all(name!='dsh' for name,_ in self.calls()))
+        self.assertEqual(list((self.home/'dsh/lmm-provider-packages').iterdir()),[])
+
+    def test_dsh_truncated_download_never_installs_or_retains_package(self):
+        self.assertEqual(self.run_script('dsh.sh',DSH_TRUNCATED='1').returncode,18)
+        self.assertTrue(all(name!='dsh' for name,_ in self.calls()))
+        self.assertEqual(list((self.home/'dsh/lmm-provider-packages').iterdir()),[])
+
+    def test_dsh_corrupt_cached_package_is_not_replaced_or_installed(self):
+        cache=self.home/'dsh/lmm-provider-packages'
+        cache.mkdir(parents=True,mode=0o700)
+        package=cache/(DSH_FIXTURE_SHA256+'.tgz')
+        package.write_bytes(b'changed')
+        result=self.run_script('dsh.sh')
+        self.assertNotEqual(result.returncode,0)
+        self.assertIn('checksum mismatch',result.stderr)
+        self.assertEqual(package.read_bytes(),b'changed')
+        self.assertTrue(all(name!='dsh' for name,_ in self.calls()))
+        self.assertEqual(list(cache.glob('.download.*')),[])
+
+    def test_dsh_cache_symlink_is_rejected_before_download(self):
+        target=self.home/'foreign'
+        target.mkdir(mode=0o700)
+        (self.home/'dsh').mkdir()
+        (self.home/'dsh/lmm-provider-packages').symlink_to(target,target_is_directory=True)
+        self.assertNotEqual(self.run_script('dsh.sh').returncode,0)
+        self.assertEqual([name for name,_ in self.calls()],['npm'])
+        self.assertEqual(list(target.iterdir()),[])
+
+    def test_dsh_plugin_failure_retains_verified_file_and_exit_status(self):
+        self.assertEqual(self.run_script('dsh.sh',COMMAND_EXIT='17').returncode,17)
+        package=self.home/'dsh/lmm-provider-packages'/(DSH_FIXTURE_SHA256+'.tgz')
+        self.assertEqual(package.read_bytes(),b'fixture')
+        self.assertEqual(list(package.parent.glob('.download.*')),[])
+
+    def test_dsh_invalid_profiles_stop_before_host_install(self):
+        for args in [('../bad',),('two words',),('--help',),('web','extra')]:
+            self.assertEqual(self.run_script('dsh.sh',*args).returncode,2)
+        self.assertEqual(self.calls(),[])
 
     def test_npm_failure_never_installs_plugin(self):
         self.assertEqual(self.run_script('dsh.sh',NPM_EXIT='9').returncode,9)

@@ -7,7 +7,7 @@ import { createRequire } from 'node:module';
 import { createInterface } from 'node:readline/promises';
 import { pathToFileURL } from 'node:url';
 
-export const PROVIDER_REV = '81a51a427404ee94abf7b76d414a21505632ff2e';
+export const PROVIDER_REV = 'e34e356ab7e815b24e89bab05688b3404d2cc638';
 export const PROVIDER_URL = `https://github.com/TokenNotIncluded/codewhale-lmm-provider/archive/${PROVIDER_REV}.tar.gz`;
 const require = createRequire(import.meta.url);
 const actions = ['setup', 'install', 'login', 'run', 'models', 'status', 'balance', 'usage', 'logout', 'doctor', 'menu', 'help'];
