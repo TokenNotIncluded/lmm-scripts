@@ -54,14 +54,48 @@ function npm.cmd { Write-Output 'npm failed'; $global:LASTEXITCODE=9 }
 function dsh.cmd { throw 'plugin must not run' }
 '@
 Check 'dsh.ps1' $npmFailure 9 'npm failed'
-$npmSuccess = @'
+$dshTestRoot = Join-Path ([IO.Path]::GetTempPath()) ('lmm-dsh-tests-' + [guid]::NewGuid())
+New-Item -ItemType Directory -Path $dshTestRoot | Out-Null
+try {
+  $npmSuccess = @'
+# Load built-in functions before registering the checksum mock.
+Import-Module Microsoft.PowerShell.Utility
 function npm.cmd { Write-Output ($args -join '|'); $global:LASTEXITCODE=0 }
-function dsh.cmd { Write-Output ($args -join '|'); $global:LASTEXITCODE=0 }
-function Invoke-WebRequest { param($Uri,$Method,[switch]$UseBasicParsing) if ($Uri -ne 'https://github.com/TokenNotIncluded/dsh-lmm-provider/releases/latest' -or $Method -ne 'Head') { throw 'wrong release URL' }; return [pscustomobject]@{BaseResponse=[pscustomobject]@{ResponseUri=[Uri]'https://github.com/TokenNotIncluded/dsh-lmm-provider/releases/tag/v0.1.0-alpha.5'}} }
+function dsh.cmd {
+  if ($args[4] -notmatch '[\\/]21bc853b321906550cf529cecc83719e6d14fd70041cc7cb92e4aecd6316d3f1\.tgz$' -or -not (Test-Path -LiteralPath $args[4] -PathType Leaf)) { throw 'verified persistent package is missing' }
+  Write-Output ($args -join '|'); $global:LASTEXITCODE=0
+}
+function Invoke-WebRequest {
+  param($Uri,$OutFile,[switch]$UseBasicParsing)
+  if ($Uri -ne 'https://github.com/TokenNotIncluded/dsh-lmm-provider/releases/download/v0.1.0-alpha.9/dsh-lmm-provider.tgz') { throw 'wrong pinned release URL' }
+  [IO.File]::WriteAllText($OutFile,'fixture')
+}
+function Get-FileHash {
+  param($LiteralPath,$Algorithm)
+  if ($Algorithm -ne 'SHA256') { throw 'wrong digest algorithm' }
+  # This mock maps only known fixture bytes; production still uses Get-FileHash.
+  $digest = if ([IO.File]::ReadAllText($LiteralPath) -eq 'fixture') { '21bc853b321906550cf529cecc83719e6d14fd70041cc7cb92e4aecd6316d3f1' } else { 'invalid' }
+  [pscustomobject]@{Hash=$digest}
+}
+$hashCommand = Get-Command Get-FileHash
+if ($hashCommand.CommandType -ne 'Function' -or $hashCommand.ModuleName) { throw 'checksum fixture mock was not selected' }
 '@
-Check 'dsh.ps1' $npmSuccess 0 'plugin\|--profile\|headless.*releases/download/v0.1.0-alpha.5/dsh-lmm-provider.tgz' '-Profile headless'
-Check 'dsh.ps1' ($npmSuccess+"`nfunction Invoke-WebRequest { throw 'missing-release' }") 1 'missing-release'
-Check 'dsh.ps1' ($npmSuccess+"`nfunction Invoke-WebRequest { [pscustomobject]@{BaseResponse=[pscustomobject]@{ResponseUri=[Uri]'https://evil.invalid/plugin.tgz'}} }") 1 'Unexpected plugin release URL'
+  $npmSuccess = "`$env:DSH_HOME='" + $dshTestRoot.Replace("'","''") + "'`n" + $npmSuccess
+  Check 'dsh.ps1' $npmSuccess 0 'plugin\|--profile\|headless\|add\|.*\.tgz\|--ignore-scripts' '-Profile headless'
+  $cachedPackage = Join-Path (Join-Path $dshTestRoot 'lmm-provider-packages') '21bc853b321906550cf529cecc83719e6d14fd70041cc7cb92e4aecd6316d3f1.tgz'
+  if ([IO.File]::ReadAllText($cachedPackage) -ne 'fixture') { throw 'package must survive installation for profile updates' }
+  Check 'dsh.ps1' ($npmSuccess+"`nfunction Invoke-WebRequest { throw 'missing-release' }") 1 'missing-release'
+  Check 'dsh.ps1' ($npmSuccess+"`nfunction Invoke-WebRequest { param(`$Uri,`$OutFile,[switch]`$UseBasicParsing) [IO.File]::WriteAllText(`$OutFile,'altered') }") 1 'checksum mismatch'
+  Check 'dsh.ps1' ($npmSuccess+"`nfunction Invoke-WebRequest { param(`$Uri,`$OutFile,[switch]`$UseBasicParsing) [IO.File]::WriteAllText(`$OutFile,'fixture'); throw 'truncated-download' }") 1 'truncated-download'
+  Check 'dsh.ps1' ($npmSuccess+"`nfunction dsh.cmd { Write-Output 'plugin-failed'; `$global:LASTEXITCODE=17 }") 17 'plugin-failed'
+  if ([IO.File]::ReadAllText($cachedPackage) -ne 'fixture') { throw 'verified package lost after plugin failure' }
+  [IO.File]::WriteAllText($cachedPackage,'changed')
+  Check 'dsh.ps1' $npmSuccess 1 'checksum mismatch'
+  if ([IO.File]::ReadAllText($cachedPackage) -ne 'changed') { throw 'corrupt package was overwritten' }
+  if (@(Get-ChildItem -LiteralPath (Join-Path $dshTestRoot 'lmm-provider-packages') -Force -Filter '.download-*').Count) { throw 'temporary download was not cleaned' }
+} finally {
+  Remove-Item -LiteralPath $dshTestRoot -Recurse -Force -ErrorAction SilentlyContinue
+}
 $upstream = @'
 function Invoke-RestMethod { return 'param([string]$Version) Write-Output "upstream:$Version"' }
 '@
