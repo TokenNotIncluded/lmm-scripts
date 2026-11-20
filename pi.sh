@@ -9,4 +9,5 @@ installer=$(curl -fsSL https://pi.dev/install.sh)
 exec sh -c "$installer"'
 pi=$(pi_installed_path); "$pi" --version
 command -v npm >/dev/null 2>&1 || { echo "npm is required to install the LMM plugin and remove conflicting sources." >&2; exit 1; }
-LMM_PI_BIN="$pi" npm exec --yes --package=@tokennotincluded/pi-lmm-provider@alpha -- lmm-pi-provider git:github.com/TokenNotIncluded/pi-lmm-provider'
+plugin=@tokennotincluded/pi-lmm-provider@0.1.0-alpha.7
+LMM_PI_BIN="$pi" npm exec --yes --package="$plugin" -- lmm-pi-provider "npm:$plugin"'

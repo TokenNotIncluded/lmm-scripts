@@ -125,7 +125,7 @@ class InstallTests(unittest.TestCase):
         self.assertEqual(self.calls(),[
             ['curl',['-fsSL','https://pi.dev/install.sh']],
             ['official-pi',['--version']],
-            ['npm',['exec','--yes','--package=@tokennotincluded/pi-lmm-provider@alpha','--','lmm-pi-provider','git:github.com/TokenNotIncluded/pi-lmm-provider']],
+            ['npm',['exec','--yes','--package=@tokennotincluded/pi-lmm-provider@0.1.0-alpha.7','--','lmm-pi-provider','npm:@tokennotincluded/pi-lmm-provider@0.1.0-alpha.7']],
         ])
 
     def test_pi_official_failure_or_cancellation_stops_plugin(self):
@@ -143,7 +143,7 @@ class InstallTests(unittest.TestCase):
                 self.assertEqual(result.returncode,0,result.stderr)
                 self.assertNotIn('plugin skipped',result.stderr)
                 self.assertEqual([name for name,_ in self.calls()],['curl','official-pi','npm'])
-                self.assertEqual(self.calls()[-1][1][-1], 'git:github.com/TokenNotIncluded/pi-lmm-provider')
+                self.assertEqual(self.calls()[-1][1][-1], 'npm:@tokennotincluded/pi-lmm-provider@0.1.0-alpha.7')
                 shutil.rmtree(self.home/"official pi's bin")
                 self.log.write_text('')
 
