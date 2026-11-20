@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [windows-latest]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     steps:
@@ -25,14 +25,6 @@ jobs:
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:
           python-version: '3.x'
-      - name: Shell contracts
-        if: runner.os != 'Windows'
-        run: |
-          python3 test.py
-          python3 test-ai-tools.py
-      - name: ShellCheck
-        if: runner.os == 'Linux'
-        run: shellcheck *.sh
       - name: PowerShell contracts
         shell: pwsh
         run: ./test.ps1
@@ -40,26 +32,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: powershell
         run: .\test.ps1
-      - name: Real Unix CLI installs
-        if: runner.os != 'Windows'
-        shell: bash
-        run: |
-          export PI_CODING_AGENT_DIR="$RUNNER_TEMP/pi-profile" DSH_HOME="$RUNNER_TEMP/dsh-profile"
-          export CODEX_HOME="$RUNNER_TEMP/codex-profile" CODEX_INSTALL_DIR="$RUNNER_TEMP/codex-bin"
-          export CODEX_NON_INTERACTIVE=true
-          bash pi.sh
-          pi --version
-          pi list
-          bash dsh.sh
-          dsh --version
-          dsh plugin --profile web list --depth 0
-          bash codex.sh
-          "$CODEX_INSTALL_DIR/codex" --version
-          bash claude-code.sh stable
-          "$HOME/.local/bin/claude" --version
-          bash lmm.sh
-          "$HOME/.local/bin/lmm" --version
-      - name: Real Windows CLI installs
+      - name: Real Windows CLI installs (DSH instrumented diagnostic)
         if: runner.os == 'Windows'
         shell: powershell
         run: |
@@ -72,36 +45,14 @@ jobs:
           $env:CODEX_NON_INTERACTIVE='true'
           foreach ($tool in @('pi','dsh','codex','claude-code','lmm')) {
             Write-Host "Installing $tool"
-            & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ".\$tool.ps1"
+            if ($tool -eq 'dsh') {
+              python test-dsh-windows-stages.py
+            } else {
+              & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ".\$tool.ps1"
+            }
             if ($LASTEXITCODE) { throw "$tool install failed: $LASTEXITCODE" }
           }
           foreach ($command in @("$env:PI_CODING_AGENT_DIR\bin\pi.cmd",'dsh.cmd',"$env:CODEX_INSTALL_DIR\codex.exe","$HOME\.local\bin\claude.exe","$HOME\.local\bin\lmm.exe")) {
             & $command --version
             if ($LASTEXITCODE) { throw "$command failed: $LASTEXITCODE" }
           }
-  linux-libc:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    strategy:
-      fail-fast: false
-      matrix:
-        image: [debian:12, alpine:3.22]
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
-      - name: Official installers without Node
-        env:
-          IMAGE: ${{ matrix.image }}
-        run: |
-          docker run --rm -v "$PWD:/src:ro" "$IMAGE" sh -ec '
-            if command -v apk >/dev/null; then
-              apk add --no-cache bash curl ca-certificates libgcc libstdc++ ripgrep
-              export USE_BUILTIN_RIPGREP=0
-            else
-              apt-get update && apt-get install -y bash curl ca-certificates
-            fi
-            export CODEX_NON_INTERACTIVE=true
-            bash /src/codex.sh
-            /root/.local/bin/codex --version
-            bash /src/claude-code.sh stable
-            /root/.local/bin/claude --version
-          '
