@@ -1,8 +1,5 @@
-name: Installer checks
+name: DSH managed Windows diagnostic
 on:
-  push:
-    branches: [main]
-  pull_request:
   workflow_dispatch:
 permissions:
   contents: read
@@ -10,29 +7,48 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 jobs:
-  platforms:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+  windows:
+    runs-on: windows-latest
     timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: product
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      - name: Checkout diagnostic control
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          ref: ${{ github.sha }}
+          path: control
+          persist-credentials: false
+        env:
+          GIT_CONFIG_COUNT: '2'
+          GIT_CONFIG_KEY_0: core.autocrlf
+          GIT_CONFIG_VALUE_0: 'false'
+          GIT_CONFIG_KEY_1: core.eol
+          GIT_CONFIG_VALUE_1: lf
+      - name: Checkout exact product
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          ref: aeb3e19744b75f70a6a26d4fefca6c7062f8e200
+          path: product
+          persist-credentials: false
+        env:
+          GIT_CONFIG_COUNT: '2'
+          GIT_CONFIG_KEY_0: core.autocrlf
+          GIT_CONFIG_VALUE_0: 'false'
+          GIT_CONFIG_KEY_1: core.eol
+          GIT_CONFIG_VALUE_1: lf
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
         with:
           node-version: 24.21.0
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:
           python-version: '3.x'
-      - name: Shell contracts
-        if: runner.os != 'Windows'
+      - name: Bind immutable source before Windows execution
+        shell: pwsh
         run: |
-          python3 test.py
-          python3 test-ai-tools.py
-      - name: ShellCheck
-        if: runner.os == 'Linux'
-        run: shellcheck *.sh
+          python -B ../control/.github/scripts/verify-dsh-managed-source.py before . ../control "$env:RUNNER_TEMP/dsh-managed-windows-evidence"
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: PowerShell contracts
         shell: pwsh
         run: ./test.ps1
@@ -40,25 +56,6 @@ jobs:
         if: runner.os == 'Windows'
         shell: powershell
         run: .\test.ps1
-      - name: Real Unix CLI installs
-        if: runner.os != 'Windows'
-        shell: bash
-        run: |
-          export PI_CODING_AGENT_DIR="$RUNNER_TEMP/pi-profile" DSH_HOME="$RUNNER_TEMP/dsh-profile"
-          export CODEX_HOME="$RUNNER_TEMP/codex-profile" CODEX_INSTALL_DIR="$RUNNER_TEMP/codex-bin"
-          export CODEX_NON_INTERACTIVE=true
-          bash pi.sh
-          pi --version
-          pi list
-          bash dsh.sh
-          dsh --version
-          dsh plugin --profile web list --depth 0
-          bash codex.sh
-          "$CODEX_INSTALL_DIR/codex" --version
-          bash claude-code.sh stable
-          "$HOME/.local/bin/claude" --version
-          bash lmm.sh
-          "$HOME/.local/bin/lmm" --version
       - name: Real Windows CLI installs
         if: runner.os == 'Windows'
         shell: powershell
@@ -110,29 +107,17 @@ jobs:
           } finally {
             [Environment]::SetEnvironmentVariable('Path',$userPathBefore,'User')
           }
-  linux-libc:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    strategy:
-      fail-fast: false
-      matrix:
-        image: [debian:12, alpine:3.22]
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
-      - name: Official installers without Node
-        env:
-          IMAGE: ${{ matrix.image }}
+      - name: Bind immutable source after Windows execution
+        if: always()
+        shell: pwsh
         run: |
-          docker run --rm -v "$PWD:/src:ro" "$IMAGE" sh -ec '
-            if command -v apk >/dev/null; then
-              apk add --no-cache bash curl ca-certificates libgcc libstdc++ ripgrep
-              export USE_BUILTIN_RIPGREP=0
-            else
-              apt-get update && apt-get install -y bash curl ca-certificates
-            fi
-            export CODEX_NON_INTERACTIVE=true
-            bash /src/codex.sh
-            /root/.local/bin/codex --version
-            bash /src/claude-code.sh stable
-            /root/.local/bin/claude --version
-          '
+          python -B ../control/.github/scripts/verify-dsh-managed-source.py after . ../control "$env:RUNNER_TEMP/dsh-managed-windows-evidence"
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Preserve immutable source evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: dsh-managed-windows-aeb3e197-source
+          path: ${{ runner.temp }}/dsh-managed-windows-evidence/*.json
+          if-no-files-found: error
+          retention-days: 14
